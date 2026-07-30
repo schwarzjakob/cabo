@@ -11,8 +11,10 @@ import {
 import {
   applyClientEvent,
   emptyDisplay,
+  expireFlashes,
   faceUpInHand,
   onTurnChanged,
+  FLASH_MS,
   type Display,
 } from "./display.js";
 
@@ -225,5 +227,80 @@ describe("the client never shows a card that is not there", () => {
     }
 
     expect(state.phase).toBe("gameOver");
+  });
+});
+
+describe("showing what a player is doing right now", () => {
+  const at = (display: Display, playerId: PlayerId, slot: number) =>
+    display.flashes.find(
+      (flash) => flash.playerId === playerId && flash.slot === slot,
+    );
+
+  test("flags the slot an opponent peeked at, without the value", () => {
+    const display = applyClientEvent(
+      emptyDisplay,
+      { type: "peeked", playerId: "them", slot: 2 },
+      "turn",
+      "me",
+      1000,
+    );
+
+    expect(at(display, "them", 2)?.kind).toBe("peek");
+    expect(faceUpInHand(display, "them", 2)).toBeNull();
+  });
+
+  test("flags the card of yours that somebody spied on", () => {
+    const display = applyClientEvent(
+      emptyDisplay,
+      { type: "spied", playerId: "them", targetPlayerId: "me", slot: 1 },
+      "turn",
+      "me",
+      1000,
+    );
+
+    expect(at(display, "me", 1)?.kind).toBe("spy");
+  });
+
+  test("flags both sides of a swap, so everyone sees what moved", () => {
+    const display = applyClientEvent(
+      emptyDisplay,
+      {
+        type: "swapped",
+        playerId: "them",
+        ownSlot: 3,
+        targetPlayerId: "me",
+        targetSlot: 0,
+      },
+      "turn",
+      "me",
+      1000,
+    );
+
+    expect(at(display, "them", 3)?.kind).toBe("swap");
+    expect(at(display, "me", 0)?.kind).toBe("swap");
+  });
+
+  test("fades a flash once it has been on screen long enough", () => {
+    const display = applyClientEvent(
+      emptyDisplay,
+      { type: "peeked", playerId: "them", slot: 2 },
+      "turn",
+      "me",
+      1000,
+    );
+
+    expect(expireFlashes(display, 1000 + FLASH_MS + 1).flashes).toEqual([]);
+  });
+
+  test("keeps a flash that is still fresh", () => {
+    const display = applyClientEvent(
+      emptyDisplay,
+      { type: "peeked", playerId: "them", slot: 2 },
+      "turn",
+      "me",
+      1000,
+    );
+
+    expect(expireFlashes(display, 1100).flashes).toHaveLength(1);
   });
 });

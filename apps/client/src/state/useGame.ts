@@ -6,6 +6,7 @@ import { revealed } from "./reveals.js";
 import {
   applyClientEvent,
   emptyDisplay,
+  expireFlashes,
   faceUpInHand,
   onPeekPhaseEnded,
   onTurnChanged,
@@ -30,6 +31,8 @@ export interface Game {
   faceUpAt: (playerId: PlayerId, slot: number) => number | null;
   /** Cards just traded onto the discard pile, shown fanned so the table sees them. */
   pileFan: number[];
+  /** What just happened to a slot: a look, a spy, a swap. Position only. */
+  flashAt: (playerId: PlayerId, slot: number) => "peek" | "spy" | "swap" | null;
   createRoom: (nickname: string) => void;
   joinRoom: (code: string, nickname: string) => void;
   startGame: () => void;
@@ -122,6 +125,17 @@ export function useGame(): Game {
     turnRef.current = view.currentPlayerId;
   }, [view]);
 
+  // Markers fade on their own, so the table shows what is happening now rather
+  // than a growing pile of history.
+  useEffect(() => {
+    if (display.flashes.length === 0) return;
+    const handle = setInterval(
+      () => setDisplay((current) => expireFlashes(current, Date.now())),
+      250,
+    );
+    return () => clearInterval(handle);
+  }, [display.flashes.length]);
+
   // A rejected move is a transient nudge, not a state you have to dismiss.
   useEffect(() => {
     if (!error) return;
@@ -149,6 +163,13 @@ export function useGame(): Game {
       [display],
     ),
     pileFan: display.pileFan,
+    flashAt: useCallback(
+      (playerId, slot) =>
+        display.flashes.find(
+          (flash) => flash.playerId === playerId && flash.slot === slot,
+        )?.kind ?? null,
+      [display],
+    ),
     createRoom: useCallback((nickname) => {
       connection.current?.send({ type: "create_room", nickname });
     }, []),

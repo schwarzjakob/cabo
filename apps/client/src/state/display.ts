@@ -8,6 +8,20 @@ import { applyEvent, forgetScope, type RevealScope, type Reveals } from "./revea
  * card actually sitting there. A display that lies is worse than one that shows
  * nothing, because the player will act on it.
  */
+/** How long a "someone just did something to this card" marker stays up. */
+export const FLASH_MS = 2200;
+
+/**
+ * A momentary marker on a slot: somebody looked at it, or swapped it. Never
+ * carries a value — at a real table you see the hand move, not the card.
+ */
+export interface Flash {
+  playerId: PlayerId;
+  slot: number;
+  kind: "peek" | "spy" | "swap";
+  at: number;
+}
+
 export interface Display {
   /** Private looks, shown only while the card is held down. */
   reveals: Reveals;
@@ -15,13 +29,23 @@ export interface Display {
   handFaceUp: Record<string, Card>;
   /** Cards just traded away, now sitting on the discard pile. */
   pileFan: Card[];
+  /** Momentary "this just happened" markers. */
+  flashes: Flash[];
 }
 
 export const emptyDisplay: Display = {
   reveals: {},
   handFaceUp: {},
   pileFan: [],
+  flashes: [],
 };
+
+export function expireFlashes(display: Display, now: number): Display {
+  const fresh = display.flashes.filter((flash) => now - flash.at < FLASH_MS);
+  return fresh.length === display.flashes.length
+    ? display
+    : { ...display, flashes: fresh };
+}
 
 const keyOf = (playerId: PlayerId, slot: number) => `${playerId}:${slot}`;
 
@@ -38,8 +62,11 @@ export function applyClientEvent(
   event: ClientEvent,
   scope: RevealScope,
   youId: PlayerId,
+  now: number = Date.now(),
 ): Display {
   const reveals = applyEvent(display.reveals, event, scope, youId);
+  const flashes = [...display.flashes, ...flashesFor(event, now)];
+  display = { ...display, flashes };
 
   switch (event.type) {
     case "match_revealed":
@@ -81,11 +108,47 @@ export function applyClientEvent(
         reveals,
         handFaceUp: withoutSlots(display.handFaceUp, event.playerId, event.slots),
         pileFan: traded,
+        flashes: display.flashes,
       };
     }
 
     default:
       return { ...display, reveals };
+  }
+}
+
+/**
+ * What the table gets to see happen. Positions only — everyone watches you lift
+ * a card, nobody gets to read it over your shoulder.
+ */
+function flashesFor(event: ClientEvent, now: number): Flash[] {
+  switch (event.type) {
+    case "peeked":
+      return [{ playerId: event.playerId, slot: event.slot, kind: "peek", at: now }];
+
+    case "spied":
+      return [
+        {
+          playerId: event.targetPlayerId,
+          slot: event.slot,
+          kind: "spy",
+          at: now,
+        },
+      ];
+
+    case "swapped":
+      return [
+        { playerId: event.playerId, slot: event.ownSlot, kind: "swap", at: now },
+        {
+          playerId: event.targetPlayerId,
+          slot: event.targetSlot,
+          kind: "swap",
+          at: now,
+        },
+      ];
+
+    default:
+      return [];
   }
 }
 
@@ -95,6 +158,7 @@ export function onTurnChanged(display: Display): Display {
     reveals: forgetScope(display.reveals, "turn"),
     handFaceUp: {},
     pileFan: [],
+    flashes: [],
   };
 }
 

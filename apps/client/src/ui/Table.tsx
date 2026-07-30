@@ -144,7 +144,12 @@ export function Table({ game }: { game: Game }) {
                   empty={!filled}
                   value={game.cardAt(player.id, slot)}
                   faceUp={game.faceUpAt(player.id, slot)}
-                  highlighted={player.peeksUsed.includes(slot)}
+                  flash={game.flashAt(player.id, slot)}
+                  targetable={
+                    yourTurn &&
+                    mode.kind === "power" &&
+                    (mode.power === "spy" || mode.ownSlot !== undefined)
+                  }
                   onSelect={() => onOpponentSlot(player.id, slot)}
                 />
               ))}
@@ -219,7 +224,19 @@ export function Table({ game }: { game: Game }) {
               empty={!filled}
               value={game.cardAt(you, slot)}
               faceUp={game.faceUpAt(you, slot)}
-              selected={revealed.includes(slot)}
+              selected={
+                revealed.includes(slot) ||
+                (mode.kind === "power" &&
+                  mode.power === "swap" &&
+                  mode.ownSlot === slot)
+              }
+              flash={game.flashAt(you, slot)}
+              targetable={
+                yourTurn &&
+                (mode.kind === "replace" ||
+                  mode.kind === "match" ||
+                  (mode.kind === "power" && mode.power !== "spy"))
+              }
               highlighted={
                 view.phase === "peeking" && yours.peeksUsed.includes(slot)
               }

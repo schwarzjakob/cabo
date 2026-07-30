@@ -539,3 +539,54 @@ body {
     transform: none;
   }
 }
+
+/* Somebody just did something to this card. Position only — never a value. */
+.card--flash::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 13px;
+  border: 2px solid currentColor;
+  animation: flash 2.2s ease forwards;
+  pointer-events: none;
+}
+
+.card--flash-peek {
+  color: var(--accent);
+}
+.card--flash-spy {
+  color: var(--warn);
+}
+.card--flash-swap {
+  color: var(--gold);
+}
+
+@keyframes flash {
+  0% {
+    opacity: 0;
+    transform: scale(1.18);
+  }
+  12% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Tappable right now for whatever action is in progress. */
+.card--targetable {
+  border-color: var(--accent);
+  border-style: dashed;
+  animation: breathe 1.6s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  50% {
+    opacity: 0.72;
+  }
+}

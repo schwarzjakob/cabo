@@ -8,6 +8,10 @@ interface CardProps {
   empty?: boolean;
   selected?: boolean;
   highlighted?: boolean;
+  /** Something just happened to this slot — position only, never a value. */
+  flash?: "peek" | "spy" | "swap" | null;
+  /** This card can be tapped right now for the action in progress. */
+  targetable?: boolean;
   small?: boolean;
   onSelect?: () => void;
   /**
@@ -29,6 +33,8 @@ export function Card({
   empty = false,
   selected = false,
   highlighted = false,
+  flash = null,
+  targetable = false,
   small = false,
   onSelect,
   onHold,
@@ -58,6 +64,8 @@ export function Card({
         faceUp !== null ? "card--revealed" : "",
         selected ? "card--selected" : "",
         highlighted ? "card--highlighted" : "",
+        targetable ? "card--targetable" : "",
+        flash ? `card--flash card--flash-${flash}` : "",
         value !== null ? "card--knowable" : "",
       ]
         .filter(Boolean)
