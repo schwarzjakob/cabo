@@ -32,7 +32,10 @@ export interface Game {
   /** Cards just traded onto the discard pile, shown fanned so the table sees them. */
   pileFan: number[];
   /** What just happened to a slot: a look, a spy, a swap. Position only. */
-  flashAt: (playerId: PlayerId, slot: number) => "peek" | "spy" | "swap" | null;
+  flashAt: (
+    playerId: PlayerId,
+    slot: number,
+  ) => "peek" | "spy" | "swap" | "replace" | null;
   createRoom: (nickname: string) => void;
   joinRoom: (code: string, nickname: string) => void;
   startGame: () => void;

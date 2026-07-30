@@ -9,7 +9,7 @@ interface CardProps {
   selected?: boolean;
   highlighted?: boolean;
   /** Something just happened to this slot — position only, never a value. */
-  flash?: "peek" | "spy" | "swap" | null;
+  flash?: "peek" | "spy" | "swap" | "replace" | null;
   /** This card can be tapped right now for the action in progress. */
   targetable?: boolean;
   small?: boolean;

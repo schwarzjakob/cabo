@@ -304,3 +304,81 @@ describe("showing what a player is doing right now", () => {
     expect(expireFlashes(display, 1100).flashes).toHaveLength(1);
   });
 });
+
+describe("showing cards move around the table", () => {
+  const at = (display: Display, playerId: PlayerId, slot: number) =>
+    display.flashes.find(
+      (flash) => flash.playerId === playerId && flash.slot === slot,
+    );
+
+  test("flags the slot a replaced card went into", () => {
+    const display = applyClientEvent(
+      emptyDisplay,
+      { type: "placed", playerId: "them", slot: 2, replaced: 9 },
+      "turn",
+      "me",
+      1000,
+    );
+
+    expect(at(display, "them", 2)?.kind).toBe("replace");
+  });
+
+  test("never leaks the new card's value with the marker", () => {
+    const display = applyClientEvent(
+      emptyDisplay,
+      { type: "placed", playerId: "them", slot: 2, replaced: 9 },
+      "turn",
+      "me",
+      1000,
+    );
+
+    expect(faceUpInHand(display, "them", 2)).toBeNull();
+  });
+
+  test("flags every slot a completed trade emptied or filled", () => {
+    const display = applyClientEvent(
+      emptyDisplay,
+      {
+        type: "match_succeeded",
+        playerId: "them",
+        slots: [0, 3],
+        into: 3,
+        matchedValue: 5,
+      },
+      "turn",
+      "me",
+      1000,
+    );
+
+    expect(at(display, "them", 0)?.kind).toBe("replace");
+    expect(at(display, "them", 3)?.kind).toBe("replace");
+  });
+});
+
+describe("markers outlive the turn that caused them", () => {
+  test("a replace still shows after the turn has passed on", () => {
+    // Replacing a card ends your turn at once, so a marker cleared by the turn
+    // change would be destroyed in the same update it arrived in.
+    const flashed = applyClientEvent(
+      emptyDisplay,
+      { type: "placed", playerId: "them", slot: 2, replaced: 9 },
+      "turn",
+      "me",
+      1000,
+    );
+
+    expect(onTurnChanged(flashed).flashes).toHaveLength(1);
+  });
+
+  test("but the looks that turn granted are still forgotten", () => {
+    const looked = applyClientEvent(
+      emptyDisplay,
+      { type: "peeked", playerId: "me", slot: 0, card: 7 },
+      "turn",
+      "me",
+      1000,
+    );
+
+    expect(onTurnChanged(looked).reveals).toEqual({});
+  });
+});

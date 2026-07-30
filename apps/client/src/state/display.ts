@@ -18,7 +18,7 @@ export const FLASH_MS = 2200;
 export interface Flash {
   playerId: PlayerId;
   slot: number;
-  kind: "peek" | "spy" | "swap";
+  kind: "peek" | "spy" | "swap" | "replace";
   at: number;
 }
 
@@ -136,6 +136,21 @@ function flashesFor(event: ClientEvent, now: number): Flash[] {
         },
       ];
 
+    case "placed":
+      // Everyone must see which position changed, even though only the player
+      // who put the card there knows what it is.
+      return [
+        { playerId: event.playerId, slot: event.slot, kind: "replace", at: now },
+      ];
+
+    case "match_succeeded":
+      return event.slots.map((slot) => ({
+        playerId: event.playerId,
+        slot,
+        kind: "replace" as const,
+        at: now,
+      }));
+
     case "swapped":
       return [
         { playerId: event.playerId, slot: event.ownSlot, kind: "swap", at: now },
@@ -158,7 +173,10 @@ export function onTurnChanged(display: Display): Display {
     reveals: forgetScope(display.reveals, "turn"),
     handFaceUp: {},
     pileFan: [],
-    flashes: [],
+    // Flashes deliberately survive: a replacement ends the turn the instant it
+    // happens, so clearing them here would destroy the marker in the same
+    // update that created it. They fade on their own clock.
+    flashes: display.flashes,
   };
 }
 

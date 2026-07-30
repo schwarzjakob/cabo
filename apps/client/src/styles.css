@@ -590,3 +590,8 @@ body {
     opacity: 0.72;
   }
 }
+
+/* A card changed hands or position here. */
+.card--flash-replace {
+  color: #3ddc97;
+}
