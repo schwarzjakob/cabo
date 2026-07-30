@@ -7,6 +7,8 @@ const log = (...args) => console.log(...args);
 
 let leaks = 0;
 let rounds = 0;
+/** Events each bot received about actions somebody ELSE took. */
+const seenFromOthers = {};
 
 class Bot {
   constructor(name) {
@@ -33,6 +35,15 @@ class Bot {
 
     if (message.type === "error") {
       log(`  ! ${this.name}: ${message.message}`);
+    }
+
+    if (message.type === "events") {
+      for (const event of message.events) {
+        const actor = event.playerId;
+        if (actor && actor !== this.id) {
+          seenFromOthers[event.type] = (seenFromOthers[event.type] ?? 0) + 1;
+        }
+      }
     }
 
     if (message.type === "state") {
@@ -211,9 +222,21 @@ log(`phase:  ${final?.phase}`);
 log(`rounds: ${rounds}`);
 log(`totals: ${final?.players.map((p) => `${p.id.slice(0, 4)}=${p.totalScore}`).join("  ")}`);
 log(`leaks:  ${leaks}`);
+log("");
+log("what players saw others do:");
+for (const [type, count] of Object.entries(seenFromOthers).sort()) {
+  log(`  ${type.padEnd(18)} ${count}`);
+}
+
+// The whole point of the table: you must be told what other people did.
+const mustBeVisible = ["swapped", "placed", "peeked"];
+const invisible = mustBeVisible.filter((type) => !seenFromOthers[type]);
+if (invisible.length > 0) {
+  log(`  !! never reached other players: ${invisible.join(", ")}`);
+}
 
 for (const bot of [a, b, c]) bot.socket.close();
 
-const ok = final?.phase === "gameOver" && leaks === 0;
+const ok = final?.phase === "gameOver" && leaks === 0 && invisible.length === 0;
 log(ok ? "\nPASS — full match played, no card values leaked" : "\nFAIL");
 process.exit(ok ? 0 : 1);

@@ -540,14 +540,19 @@ body {
   }
 }
 
-/* Somebody just did something to this card. Position only — never a value. */
+/* Somebody just did something to this card. Position only — never a value.
+   It holds and pulses until the moment passes, rather than fading on a timer
+   of its own — a Swap can hold the turn open for as long as the player needs. */
 .card--flash::before {
   content: "";
   position: absolute;
-  inset: -4px;
-  border-radius: 13px;
-  border: 2px solid currentColor;
-  animation: flash 2.2s ease forwards;
+  inset: -5px;
+  border-radius: 14px;
+  border: 3px solid currentColor;
+  box-shadow: 0 0 14px -2px currentColor;
+  animation:
+    flash-in 240ms ease both,
+    flash-pulse 1.3s ease-in-out 240ms infinite;
   pointer-events: none;
 }
 
@@ -561,20 +566,20 @@ body {
   color: var(--gold);
 }
 
-@keyframes flash {
-  0% {
+@keyframes flash-in {
+  from {
     opacity: 0;
-    transform: scale(1.18);
+    transform: scale(1.22);
   }
-  12% {
+  to {
     opacity: 1;
-    transform: scale(1);
+    transform: none;
   }
-  70% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
+}
+
+@keyframes flash-pulse {
+  50% {
+    opacity: 0.4;
   }
 }
 

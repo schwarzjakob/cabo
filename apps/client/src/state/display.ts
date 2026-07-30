@@ -8,8 +8,13 @@ import { applyEvent, forgetScope, type RevealScope, type Reveals } from "./revea
  * card actually sitting there. A display that lies is worse than one that shows
  * nothing, because the player will act on it.
  */
-/** How long a "someone just did something to this card" marker stays up. */
-export const FLASH_MS = 2200;
+/**
+ * The shortest a marker stays on screen once its turn is over. A marker lives
+ * until *both* the turn that caused it has ended and this long has passed —
+ * a Swap holds the turn open while the player takes it in, and the rest of the
+ * table needs to see it for that whole beat, however long it runs.
+ */
+export const FLASH_MS = 2600;
 
 /**
  * A momentary marker on a slot: somebody looked at it, or swapped it. Never
@@ -20,6 +25,8 @@ export interface Flash {
   slot: number;
   kind: "peek" | "spy" | "swap" | "replace";
   at: number;
+  /** Set when the turn that caused this ends; only then can it start fading. */
+  turnEnded: boolean;
 }
 
 export interface Display {
@@ -41,7 +48,9 @@ export const emptyDisplay: Display = {
 };
 
 export function expireFlashes(display: Display, now: number): Display {
-  const fresh = display.flashes.filter((flash) => now - flash.at < FLASH_MS);
+  const fresh = display.flashes.filter(
+    (flash) => !flash.turnEnded || now - flash.at < FLASH_MS,
+  );
   return fresh.length === display.flashes.length
     ? display
     : { ...display, flashes: fresh };
@@ -124,7 +133,7 @@ export function applyClientEvent(
 function flashesFor(event: ClientEvent, now: number): Flash[] {
   switch (event.type) {
     case "peeked":
-      return [{ playerId: event.playerId, slot: event.slot, kind: "peek", at: now }];
+      return [{ playerId: event.playerId, slot: event.slot, kind: "peek", at: now, turnEnded: false }];
 
     case "spied":
       return [
@@ -133,6 +142,7 @@ function flashesFor(event: ClientEvent, now: number): Flash[] {
           slot: event.slot,
           kind: "spy",
           at: now,
+          turnEnded: false,
         },
       ];
 
@@ -140,7 +150,13 @@ function flashesFor(event: ClientEvent, now: number): Flash[] {
       // Everyone must see which position changed, even though only the player
       // who put the card there knows what it is.
       return [
-        { playerId: event.playerId, slot: event.slot, kind: "replace", at: now },
+        {
+          playerId: event.playerId,
+          slot: event.slot,
+          kind: "replace",
+          at: now,
+          turnEnded: false,
+        },
       ];
 
     case "match_succeeded":
@@ -149,16 +165,24 @@ function flashesFor(event: ClientEvent, now: number): Flash[] {
         slot,
         kind: "replace" as const,
         at: now,
+        turnEnded: false,
       }));
 
     case "swapped":
       return [
-        { playerId: event.playerId, slot: event.ownSlot, kind: "swap", at: now },
+        {
+          playerId: event.playerId,
+          slot: event.ownSlot,
+          kind: "swap",
+          at: now,
+          turnEnded: false,
+        },
         {
           playerId: event.targetPlayerId,
           slot: event.targetSlot,
           kind: "swap",
           at: now,
+          turnEnded: false,
         },
       ];
 
@@ -173,10 +197,10 @@ export function onTurnChanged(display: Display): Display {
     reveals: forgetScope(display.reveals, "turn"),
     handFaceUp: {},
     pileFan: [],
-    // Flashes deliberately survive: a replacement ends the turn the instant it
-    // happens, so clearing them here would destroy the marker in the same
-    // update that created it. They fade on their own clock.
-    flashes: display.flashes,
+    // Markers survive the turn change and only start fading now: a replacement
+    // ends the turn the instant it happens, so clearing them here would destroy
+    // the marker in the same update that created it.
+    flashes: display.flashes.map((flash) => ({ ...flash, turnEnded: true })),
   };
 }
 

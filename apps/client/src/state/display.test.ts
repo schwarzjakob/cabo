@@ -280,28 +280,55 @@ describe("showing what a player is doing right now", () => {
     expect(at(display, "me", 0)?.kind).toBe("swap");
   });
 
-  test("fades a flash once it has been on screen long enough", () => {
+  test("keeps a marker up for as long as the turn is still being resolved", () => {
+    // A Swap holds the turn open while the player takes it in. The rest of the
+    // table must be able to see it for that whole beat, however long it lasts.
     const display = applyClientEvent(
       emptyDisplay,
-      { type: "peeked", playerId: "them", slot: 2 },
+      {
+        type: "swapped",
+        playerId: "them",
+        ownSlot: 3,
+        targetPlayerId: "me",
+        targetSlot: 0,
+      },
       "turn",
       "me",
       1000,
+    );
+
+    expect(expireFlashes(display, 1000 + FLASH_MS * 10).flashes).toHaveLength(2);
+  });
+
+  test("clears it once the turn has ended and it has been seen", () => {
+    const display = onTurnChanged(
+      applyClientEvent(
+        emptyDisplay,
+        { type: "peeked", playerId: "them", slot: 2 },
+        "turn",
+        "me",
+        1000,
+      ),
     );
 
     expect(expireFlashes(display, 1000 + FLASH_MS + 1).flashes).toEqual([]);
   });
 
-  test("keeps a flash that is still fresh", () => {
-    const display = applyClientEvent(
-      emptyDisplay,
-      { type: "peeked", playerId: "them", slot: 2 },
-      "turn",
-      "me",
-      1000,
+  test("holds a marker from a turn that ended instantly, so it is still seen", () => {
+    // Replacing a card ends the turn at once; without a floor the marker would
+    // be gone before anyone could look at it.
+    const display = onTurnChanged(
+      applyClientEvent(
+        emptyDisplay,
+        { type: "placed", playerId: "them", slot: 2, replaced: 9 },
+        "turn",
+        "me",
+        1000,
+      ),
     );
 
-    expect(expireFlashes(display, 1100).flashes).toHaveLength(1);
+    expect(expireFlashes(display, 1500).flashes).toHaveLength(1);
+    expect(expireFlashes(display, 1000 + FLASH_MS + 1).flashes).toEqual([]);
   });
 });
 
