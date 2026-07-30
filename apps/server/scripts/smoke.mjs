@@ -97,6 +97,12 @@ class Bot {
     if (view.phase === "gameOver") return;
     if (view.currentPlayerId !== this.id) return;
 
+    // A turn held open for a look accepts nothing but finishing it.
+    if (view.turnStage === "resolving") {
+      this.send({ type: "action", action: { type: "end_turn" } });
+      return;
+    }
+
     if (view.heldCard === null) {
       // Occasionally call CABO so the round actually ends.
       if (Math.random() < 0.12 && view.caboCalledBy === null) {
@@ -109,6 +115,45 @@ class Bot {
 
     const me = view.players.find((p) => p.id === this.id);
     const filled = me.slots.flatMap((f, i) => (f ? [i] : []));
+    const held = view.heldCard;
+    const power =
+      held === 7 || held === 8
+        ? "peek"
+        : held === 9 || held === 10
+          ? "spy"
+          : held === 11 || held === 12
+            ? "swap"
+            : null;
+    const other = view.players.find((p) => p.id !== this.id);
+
+    // Exercise the paths that hold a turn open: powers and match attempts.
+    if (power && Math.random() < 0.7) {
+      const target =
+        power === "peek"
+          ? { kind: "peek", slot: filled[0] }
+          : power === "spy"
+            ? { kind: "spy", playerId: other.id, slot: 0 }
+            : {
+                kind: "swap",
+                ownSlot: filled[0],
+                playerId: other.id,
+                theirSlot: 0,
+              };
+      this.send({ type: "action", action: { type: "use_power", target } });
+      return;
+    }
+
+    if (filled.length >= 2 && Math.random() < 0.2) {
+      const slots = [filled[0], filled[1]];
+      this.send({
+        type: "action",
+        action: {
+          type: "place_drawn",
+          target: { kind: "match", slots, into: slots[0] },
+        },
+      });
+      return;
+    }
 
     if (Math.random() < 0.5 && filled.length > 0) {
       this.send({

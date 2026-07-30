@@ -57,15 +57,26 @@ describe("Peek", () => {
     });
   });
 
-  test("discards the choice card and ends the turn", () => {
+  test("discards the choice card and holds the turn open for the look", () => {
     const { state } = applyAction(drawInto(7), "a", {
       type: "use_power",
       target: { kind: "peek", slot: 2 },
     });
 
     expect(state.discardPile).toEqual([10, 7]);
-    expect(state.currentPlayerId).toBe("b");
+    expect(state.currentPlayerId).toBe("a");
+    expect(state.turnStage).toBe("resolving");
     expect(state.heldCard).toBeNull();
+  });
+
+  test("passes the turn on once the player is done looking", () => {
+    const peeked = applyAction(drawInto(7), "a", {
+      type: "use_power",
+      target: { kind: "peek", slot: 2 },
+    }).state;
+
+    expect(applyAction(peeked, "a", { type: "end_turn" }).state.currentPlayerId)
+      .toBe("b");
   });
 
   test("leaves the hand untouched", () => {

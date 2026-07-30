@@ -1,6 +1,6 @@
 import type { Card } from "./deck.js";
 import type { GameEvent } from "./events.js";
-import type { GameState, Phase, PlayerId } from "./types.js";
+import type { GameState, Phase, PlayerId, TurnStage } from "./types.js";
 
 /**
  * What one player is allowed to know.
@@ -13,6 +13,8 @@ export interface PlayerView {
   youId: PlayerId;
   phase: Phase;
   currentPlayerId: PlayerId | null;
+  /** `resolving` means the current player is taking in what they just saw. */
+  turnStage: TurnStage;
   caboCalledBy: PlayerId | null;
   players: {
     id: PlayerId;
@@ -44,6 +46,7 @@ export function viewFor(state: GameState, viewerId: PlayerId): PlayerView {
     youId: viewerId,
     phase: state.phase,
     currentPlayerId: state.currentPlayerId,
+    turnStage: state.turnStage,
     caboCalledBy: state.caboCalledBy,
     players: state.players.map((player) => ({
       id: player.id,

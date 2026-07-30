@@ -493,3 +493,18 @@ body {
     width: 100%;
   }
 }
+
+/* A card a match turned face up: everyone sees it, briefly and obviously. */
+.card--revealed {
+  animation: flip 320ms ease;
+  box-shadow: 0 0 0 2px var(--gold);
+}
+
+@keyframes flip {
+  from {
+    transform: rotateY(90deg);
+  }
+  to {
+    transform: none;
+  }
+}

@@ -44,6 +44,8 @@ export type GameEvent =
       targetSlot: number;
     }
   | { type: "cabo_called"; playerId: PlayerId }
+  /** The turn is being held open while this player takes in what they saw. */
+  | { type: "awaiting_done"; playerId: PlayerId }
   | { type: "draw_pile_reshuffled"; cards: number }
   | {
       type: "round_scored";

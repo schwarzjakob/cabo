@@ -231,6 +231,16 @@ export class Room {
     const events: GameEvent[] = [];
     let state = game;
 
+    // A turn held open for a look just ends: they had their time to look.
+    if (state.turnStage === "resolving") {
+      const done = applyAction(state, playerId, { type: "end_turn" });
+      this.game = done.state;
+      this.requireMember(playerId).consecutiveTimeouts += 1;
+      this.listener(done.events);
+      this.rearmTimer();
+      return;
+    }
+
     // The player may already be holding a card they drew before running out of
     // time — drawing a second one is illegal, so only draw when empty-handed.
     if (state.heldCard === null) {

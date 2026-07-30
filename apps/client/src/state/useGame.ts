@@ -15,6 +15,11 @@ export interface Game {
   timer: TimerView | null;
   /** What this client is currently entitled to see, by player and slot. */
   cardAt: (playerId: PlayerId, slot: number) => number | null;
+  /**
+   * Cards a match turned face up on the table. Public — everyone sees these
+   * without holding anything, which is the point of the reveal.
+   */
+  faceUpAt: (playerId: PlayerId, slot: number) => number | null;
   createRoom: (nickname: string) => void;
   joinRoom: (code: string, nickname: string) => void;
   startGame: () => void;
@@ -33,6 +38,9 @@ export function useGame(): Game {
   const [view, setView] = useState<PlayerView | null>(null);
   const [timer, setTimer] = useState<TimerView | null>(null);
   const [reveals, setReveals] = useState<Reveals>({});
+  const [tableReveals, setTableReveals] = useState<
+    { playerId: PlayerId; slot: number; card: number }[]
+  >([]);
 
   const connection = useRef<Connection | null>(null);
   const youRef = useRef<PlayerId | null>(null);
@@ -59,6 +67,29 @@ export function useGame(): Game {
             break;
 
           case "events":
+            // A match turns cards face up for the whole table — that beat is
+            // the only chance opponents get to see what was traded.
+            for (const event of message.events) {
+              if (event.type === "match_failed") {
+                setTableReveals(
+                  event.revealed.map((each) => ({
+                    playerId: event.playerId,
+                    slot: each.slot,
+                    card: each.card,
+                  })),
+                );
+              }
+              if (event.type === "match_succeeded") {
+                setTableReveals(
+                  event.slots.map((slot) => ({
+                    playerId: event.playerId,
+                    slot,
+                    card: event.matchedValue,
+                  })),
+                );
+              }
+            }
+
             setReveals((current) => {
               const you = youRef.current;
               if (!you) return current;
@@ -97,7 +128,10 @@ export function useGame(): Game {
       setReveals((current) => forgetScope(current, "peekPhase"));
     }
     if (turnRef.current !== null && turnRef.current !== view.currentPlayerId) {
+      // The look you earned dies with the turn that earned it — from here on
+      // it is yours to remember, not the client's.
       setReveals((current) => forgetScope(current, "turn"));
+      setTableReveals([]);
     }
 
     phaseRef.current = view.phase;
@@ -125,6 +159,13 @@ export function useGame(): Game {
     cardAt: useCallback(
       (playerId, slot) => revealed(reveals, playerId, slot),
       [reveals],
+    ),
+    faceUpAt: useCallback(
+      (playerId, slot) =>
+        tableReveals.find(
+          (each) => each.playerId === playerId && each.slot === slot,
+        )?.card ?? null,
+      [tableReveals],
     ),
     createRoom: useCallback((nickname) => {
       connection.current?.send({ type: "create_room", nickname });

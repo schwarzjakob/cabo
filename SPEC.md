@@ -141,6 +141,30 @@ the physical game, where everyone watches you lift a specific card. Applies to t
 opening peek, to Peek, and to Spy (the target sees which of their cards was
 inspected).
 
+### Turns are held open for anything you learn
+
+A turn does not end the moment an action resolves. Anything that shows
+information — **Peek**, **Spy**, **Swap**, or a **match attempt** — puts the turn
+into a `resolving` stage that stays with the acting player until they press
+**Done**. An ordinary draw-and-replace or draw-and-discard still passes play on
+immediately.
+
+This exists because the physical game has a beat that the first build removed:
+you look at the card, you take it in, *then* play moves on. Without it the
+client deleted a peeked value in the same frame it arrived, so the player paid a
+card for a look they never got.
+
+The turn clock keeps running during `resolving`, and expiry ends the turn
+automatically — the beat is for absorbing information, not for stalling.
+
+**Actions are chosen before targets.** You pick Keep / Use power / Discard and
+*then* tap a card. Cards are inert until an action is chosen.
+
+**A match reveal is all-at-once and binding.** You select the whole set and
+confirm once; the cards then turn face up for everyone. Revealing them one at a
+time with the option to stop would hand the player free information whenever
+they did not match — and per the printed rules the reveal *is* the penalty.
+
 ### Clock
 
 - **60 second per-turn timer**, resetting each turn. Configurable in private

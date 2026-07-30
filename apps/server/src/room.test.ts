@@ -304,3 +304,48 @@ describe("bugs found in play", () => {
     expect(room.timer()!.playerId).not.toBe(active);
   });
 });
+
+describe("a turn held open for a look", () => {
+  beforeEach(() => vi.useFakeTimers());
+
+  /** Play on until someone is holding a choice card, then use its power. */
+  const intoResolving = () => {
+    const room = new Room("resolve");
+    const ids = fullOf(room, 2);
+    room.start();
+    for (const id of ids) room.act(id, { type: "ready" });
+
+    for (let turn = 0; turn < 40; turn++) {
+      const active = room.viewFor(ids[0]!).currentPlayerId!;
+      room.act(active, { type: "draw" });
+      const held = room.viewFor(active).heldCard!;
+
+      if (held === 7 || held === 8) {
+        room.act(active, {
+          type: "use_power",
+          target: { kind: "peek", slot: 0 },
+        });
+        return { room, active };
+      }
+      room.act(active, { type: "discard_drawn" });
+    }
+    throw new Error("never drew a Peek card");
+  };
+
+  test("stays with the player until they are done", () => {
+    const { room, active } = intoResolving();
+
+    expect(room.viewFor(active).currentPlayerId).toBe(active);
+    expect(room.viewFor(active).turnStage).toBe("resolving");
+  });
+
+  test("ends on its own when the clock runs out, without crashing", () => {
+    const { room, active } = intoResolving();
+
+    expect(() =>
+      vi.advanceTimersByTime(TURN_SECONDS * 1000 + 10),
+    ).not.toThrow();
+
+    expect(room.viewFor(active).currentPlayerId).not.toBe(active);
+  });
+});

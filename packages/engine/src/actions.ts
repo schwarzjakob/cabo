@@ -29,7 +29,9 @@ export type Action =
   | { type: "discard_drawn" }
   | { type: "take_discard"; target: Placement }
   | { type: "use_power"; target: PowerTarget }
-  | { type: "call_cabo" };
+  | { type: "call_cabo" }
+  /** Finish a turn that was held open so you could look at something. */
+  | { type: "end_turn" };
 
 /** Thrown when a player attempts something the rules do not allow. */
 export class IllegalMove extends Error {

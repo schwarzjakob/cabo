@@ -26,6 +26,9 @@ function randomAction(state: GameState, rng: () => number): Action | null {
   const pick = <T>(items: readonly T[]): T =>
     items[Math.floor(rng() * items.length)]!;
 
+  // A turn held open for a look accepts nothing else.
+  if (state.turnStage === "resolving") return { type: "end_turn" };
+
   const player = state.players.find(
     (each) => each.id === state.currentPlayerId,
   )!;

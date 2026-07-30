@@ -71,13 +71,24 @@ describe("successful match", () => {
     });
   });
 
-  test("passes the turn on", () => {
+  test("holds the turn open so the table can see the traded cards", () => {
     const { state } = applyAction(drawnOnto([3, 3, 5, 6], 1), "a", {
       type: "place_drawn",
       target: { kind: "match", slots: [0, 1], into: 0 },
     });
 
-    expect(state.currentPlayerId).toBe("b");
+    expect(state.currentPlayerId).toBe("a");
+    expect(state.turnStage).toBe("resolving");
+  });
+
+  test("passes the turn on once the player is done", () => {
+    const matched = applyAction(drawnOnto([3, 3, 5, 6], 1), "a", {
+      type: "place_drawn",
+      target: { kind: "match", slots: [0, 1], into: 0 },
+    }).state;
+
+    expect(applyAction(matched, "a", { type: "end_turn" }).state.currentPlayerId)
+      .toBe("b");
   });
 
   test("works with a card taken from the discard pile", () => {
@@ -124,8 +135,12 @@ describe("failed match", () => {
     expect(failed().state.discardPile).toEqual([10, 1]);
   });
 
-  test("loses the turn", () => {
-    expect(failed().state.currentPlayerId).toBe("b");
+  test("loses the turn once the reveal has been seen", () => {
+    const shown = failed().state;
+
+    expect(shown.turnStage).toBe("resolving");
+    expect(applyAction(shown, "a", { type: "end_turn" }).state.currentPlayerId)
+      .toBe("b");
   });
 
   test("also applies to a card taken from the discard pile", () => {

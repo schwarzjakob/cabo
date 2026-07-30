@@ -3,6 +3,8 @@ import { useCallback, useState } from "react";
 interface CardProps {
   /** The value, if this client is currently entitled to see it. */
   value: number | null;
+  /** Turned face up on the table for everyone — no holding required. */
+  faceUp?: number | null;
   empty?: boolean;
   selected?: boolean;
   highlighted?: boolean;
@@ -23,6 +25,7 @@ interface CardProps {
  */
 export function Card({
   value,
+  faceUp = null,
   empty = false,
   selected = false,
   highlighted = false,
@@ -42,7 +45,8 @@ export function Card({
     return <div className={`card card--empty ${small ? "card--small" : ""}`} />;
   }
 
-  const showing = held && value !== null;
+  const shown = faceUp !== null ? faceUp : held && value !== null ? value : null;
+  const showing = shown !== null;
 
   return (
     <button
@@ -51,6 +55,7 @@ export function Card({
         "card",
         small ? "card--small" : "",
         showing ? "card--face-up" : "",
+        faceUp !== null ? "card--revealed" : "",
         selected ? "card--selected" : "",
         highlighted ? "card--highlighted" : "",
         value !== null ? "card--knowable" : "",
@@ -63,7 +68,7 @@ export function Card({
       onPointerCancel={release}
       onClick={onSelect}
     >
-      <span className="card__face">{showing ? value : ""}</span>
+      <span className="card__face">{showing ? shown : ""}</span>
       {value !== null && !showing ? <span className="card__known" /> : null}
     </button>
   );

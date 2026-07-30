@@ -27,7 +27,12 @@ export function Table({ game }: { game: Game }) {
   useEffect(() => {
     setMode({ kind: "idle" });
     setSelection([]);
-  }, [view.currentPlayerId, view.phase, view.heldCard === null]);
+  }, [
+    view.currentPlayerId,
+    view.phase,
+    view.turnStage,
+    view.heldCard === null,
+  ]);
 
   const nicknameOf = (id: PlayerId) =>
     game.room?.seats.find((seat) => seat.id === id)?.nickname ?? "player";
@@ -58,6 +63,8 @@ export function Table({ game }: { game: Game }) {
   const onOwnSlot = (slot: number) => {
     if (view.phase === "peeking") return;
     if (!yourTurn) return;
+    // Nothing but Done gets out of a turn held open for a look.
+    if (view.turnStage === "resolving") return;
 
     if (mode.kind === "power" && mode.power === "peek") {
       game.act({ type: "use_power", target: { kind: "peek", slot } });
@@ -68,13 +75,14 @@ export function Table({ game }: { game: Game }) {
       return;
     }
 
-    // Holding a drawn card is itself a placement context — there is no
-    // separate step to enter first.
-    if (mode.kind === "place" || holding) toggle(slot);
+    // Cards are inert until an action has been chosen — deciding what you are
+    // doing comes before picking what you are doing it to.
+    if (mode.kind === "place") toggle(slot);
   };
 
   const onOpponentSlot = (playerId: PlayerId, slot: number) => {
     if (!yourTurn || mode.kind !== "power") return;
+    if (view.turnStage === "resolving") return;
 
     if (mode.power === "spy") {
       game.act({ type: "use_power", target: { kind: "spy", playerId, slot } });
@@ -154,6 +162,7 @@ export function Table({ game }: { game: Game }) {
                   small
                   empty={!filled}
                   value={game.cardAt(player.id, slot)}
+                  faceUp={game.faceUpAt(player.id, slot)}
                   highlighted={player.peeksUsed.includes(slot)}
                   onSelect={() => onOpponentSlot(player.id, slot)}
                 />
@@ -210,6 +219,7 @@ export function Table({ game }: { game: Game }) {
               key={slot}
               empty={!filled}
               value={game.cardAt(you, slot)}
+              faceUp={game.faceUpAt(you, slot)}
               selected={selection.includes(slot)}
               highlighted={
                 view.phase === "peeking" && yours.peeksUsed.includes(slot)
@@ -238,8 +248,23 @@ export function Table({ game }: { game: Game }) {
           </>
         ) : !yourTurn ? (
           <p className="hint">
-            Waiting for {nicknameOf(view.currentPlayerId ?? "")}…
+            {view.turnStage === "resolving"
+              ? `${nicknameOf(view.currentPlayerId ?? "")} is taking it in…`
+              : `Waiting for ${nicknameOf(view.currentPlayerId ?? "")}…`}
           </p>
+        ) : view.turnStage === "resolving" ? (
+          <>
+            <p className="hint">
+              Hold a card to look. Your clock is still running.
+            </p>
+            <button
+              type="button"
+              className="button button--primary"
+              onClick={() => game.act({ type: "end_turn" })}
+            >
+              Done
+            </button>
+          </>
         ) : mode.kind === "power" ? (
           <>
             <p className="hint">
@@ -259,29 +284,54 @@ export function Table({ game }: { game: Game }) {
               Cancel
             </button>
           </>
-        ) : holding ? (
+        ) : mode.kind === "place" ? (
           <>
             <p className="hint">
-              {selection.length > 1
-                ? `Trade ${selection.length} matching cards`
-                : "Tap a slot to keep it there, or discard it."}
+              {selection.length === 0
+                ? "Tap the card to replace — or tap several of the same number to trade them."
+                : selection.length === 1
+                  ? "Replace this one, or tap more to trade a match."
+                  : `Trade ${selection.length} cards — they turn face up for everyone.`}
             </p>
             <div className="actions__row">
               <button
                 type="button"
                 className="button button--primary"
                 disabled={selection.length === 0}
-                onClick={() => commitPlacement("drawn")}
+                onClick={() => commitPlacement(mode.source)}
               >
-                {selection.length > 1 ? "Trade match" : "Keep"}
+                {selection.length > 1 ? "Trade match" : "Replace"}
+              </button>
+              <button
+                type="button"
+                className="button"
+                onClick={() => {
+                  setMode({ kind: "idle" });
+                  setSelection([]);
+                }}
+              >
+                Back
+              </button>
+            </div>
+          </>
+        ) : holding ? (
+          <>
+            <p className="hint">
+              You drew a {view.heldCard}. Decide what to do with it.
+            </p>
+            <div className="actions__row">
+              <button
+                type="button"
+                className="button button--primary"
+                onClick={() => setMode({ kind: "place", source: "drawn" })}
+              >
+                Keep
               </button>
               {heldPower ? (
                 <button
                   type="button"
                   className="button"
-                  onClick={() =>
-                    setMode({ kind: "power", power: heldPower })
-                  }
+                  onClick={() => setMode({ kind: "power", power: heldPower })}
                 >
                   Use {heldPower}
                 </button>
@@ -292,30 +342,6 @@ export function Table({ game }: { game: Game }) {
                 onClick={() => game.act({ type: "discard_drawn" })}
               >
                 Discard
-              </button>
-            </div>
-          </>
-        ) : mode.kind === "place" && mode.source === "discard" ? (
-          <>
-            <p className="hint">Tap where the {view.discardTop} should go.</p>
-            <div className="actions__row">
-              <button
-                type="button"
-                className="button button--primary"
-                disabled={selection.length === 0}
-                onClick={() => commitPlacement("discard")}
-              >
-                {selection.length > 1 ? "Trade match" : "Place"}
-              </button>
-              <button
-                type="button"
-                className="button"
-                onClick={() => {
-                  setMode({ kind: "idle" });
-                  setSelection([]);
-                }}
-              >
-                Cancel
               </button>
             </div>
           </>

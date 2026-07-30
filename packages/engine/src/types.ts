@@ -4,6 +4,8 @@ export type PlayerId = string;
 
 export type Phase = "peeking" | "playing" | "roundOver" | "gameOver";
 
+export type TurnStage = "acting" | "resolving";
+
 export interface PlayerState {
   readonly id: PlayerId;
   /**
@@ -34,6 +36,12 @@ export interface GameState {
    * between a `draw` and the action that disposes of it.
    */
   heldCard: Card | null;
+  /**
+   * `resolving` means the current player has done something that told them (or
+   * the table) something — a Peek, Spy, Swap or a match — and the turn is
+   * deliberately held open so they can take it in. Only `end_turn` gets out.
+   */
+  turnStage: TurnStage;
   /** Set once someone calls Cabo; the round ends when play returns to them. */
   caboCalledBy: PlayerId | null;
   /** Who leads the current round. */

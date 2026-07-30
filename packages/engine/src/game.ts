@@ -44,6 +44,7 @@ export function createGame({ playerIds, seed }: CreateGameOptions): GameState {
     phase: "peeking",
     currentPlayerId: null,
     heldCard: null,
+    turnStage: "acting",
     caboCalledBy: null,
     firstPlayerId: players[0]!.id,
     lastRoundWinnerId: null,
@@ -114,7 +115,21 @@ function applyPlayingAction(
     throw new IllegalMove("It is not your turn");
   }
 
+  // A turn held open for a look accepts nothing but finishing it.
+  if (state.turnStage === "resolving" && action.type !== "end_turn") {
+    throw new IllegalMove("Finish looking first — press done to end your turn");
+  }
+
   switch (action.type) {
+    case "end_turn": {
+      if (state.turnStage !== "resolving") {
+        throw new IllegalMove("There is nothing to finish");
+      }
+      state.turnStage = "acting";
+      endTurn(state, events);
+      return;
+    }
+
     case "draw": {
       requireEmptyHand(state);
       const card = takeFromDrawPile(state, events);
@@ -127,7 +142,7 @@ function applyPlayingAction(
       const card = requireHeldCard(state);
       state.heldCard = null;
       place(state, player, card, action.target, events);
-      endTurn(state, events);
+      finishAction(state, action.target.kind === "match", events);
       return;
     }
 
@@ -145,7 +160,7 @@ function applyPlayingAction(
       const card = state.discardPile.pop()!;
       events.push({ type: "took_discard", playerId: player.id, card });
       place(state, player, card, action.target, events);
-      endTurn(state, events);
+      finishAction(state, action.target.kind === "match", events);
       return;
     }
 
@@ -166,7 +181,7 @@ function applyPlayingAction(
       state.heldCard = null;
       state.discardPile.push(card);
       events.push({ type: "discarded", playerId: player.id, card });
-      endTurn(state, events);
+      finishAction(state, true, events);
       return;
     }
 
@@ -373,7 +388,26 @@ function requireEmptyHand(state: GameState): void {
   }
 }
 
+/**
+ * Close out an action. Anything that revealed something to the player or to the
+ * table holds the turn open so it can be taken in; an ordinary swap of one card
+ * for another just passes play on.
+ */
+function finishAction(
+  state: GameState,
+  revealedSomething: boolean,
+  events: GameEvent[],
+): void {
+  if (revealedSomething) {
+    state.turnStage = "resolving";
+    events.push({ type: "awaiting_done", playerId: state.currentPlayerId! });
+    return;
+  }
+  endTurn(state, events);
+}
+
 function endTurn(state: GameState, events: GameEvent[]): void {
+  state.turnStage = "acting";
   const index = state.players.findIndex(
     (each) => each.id === state.currentPlayerId,
   );
