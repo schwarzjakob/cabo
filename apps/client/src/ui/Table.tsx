@@ -183,9 +183,27 @@ export function Table({ game }: { game: Game }) {
 
         <div className="pile">
           <div className="pile__stack">
-            <div className="card card--face-up">{view.discardTop ?? ""}</div>
+            {/* Cards just traded away are fanned on top, so the table can see
+                what went out without having caught the reveal as it happened. */}
+            {game.pileFan.length > 0 ? (
+              <div className="pile__fan">
+                {game.pileFan.map((card, index) => (
+                  <div
+                    key={index}
+                    className="card card--face-up card--traded"
+                    style={{ marginLeft: index === 0 ? 0 : -34 }}
+                  >
+                    {card}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="card card--face-up">{view.discardTop ?? ""}</div>
+            )}
           </div>
-          <span className="pile__label">Discard</span>
+          <span className="pile__label">
+            {game.pileFan.length > 0 ? "Traded" : "Discard"}
+          </span>
         </div>
       </section>
 

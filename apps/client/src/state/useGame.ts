@@ -2,7 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Action, PlayerId, PlayerView } from "@cabo/engine";
 import type { RoomView, TimerView } from "@cabo/protocol";
 import { Connection } from "../net/connection.js";
-import { applyEvent, forgetScope, revealed, type Reveals } from "./reveals.js";
+import { revealed } from "./reveals.js";
+import {
+  applyClientEvent,
+  emptyDisplay,
+  faceUpInHand,
+  onPeekPhaseEnded,
+  onTurnChanged,
+  type Display,
+} from "./display.js";
 
 const TOKEN_KEY = "cabo.token";
 
@@ -20,6 +28,8 @@ export interface Game {
    * without holding anything, which is the point of the reveal.
    */
   faceUpAt: (playerId: PlayerId, slot: number) => number | null;
+  /** Cards just traded onto the discard pile, shown fanned so the table sees them. */
+  pileFan: number[];
   createRoom: (nickname: string) => void;
   joinRoom: (code: string, nickname: string) => void;
   startGame: () => void;
@@ -37,10 +47,7 @@ export function useGame(): Game {
   const [room, setRoom] = useState<RoomView | null>(null);
   const [view, setView] = useState<PlayerView | null>(null);
   const [timer, setTimer] = useState<TimerView | null>(null);
-  const [reveals, setReveals] = useState<Reveals>({});
-  const [tableReveals, setTableReveals] = useState<
-    { playerId: PlayerId; slot: number; card: number }[]
-  >([]);
+  const [display, setDisplay] = useState<Display>(emptyDisplay);
 
   const connection = useRef<Connection | null>(null);
   const youRef = useRef<PlayerId | null>(null);
@@ -66,51 +73,19 @@ export function useGame(): Game {
             setTimer(message.timer);
             break;
 
-          case "events":
-            // A match turns cards face up for the whole table — that beat is
-            // the only chance opponents get to see what was traded.
-            for (const event of message.events) {
-              if (event.type === "match_revealed") {
-                setTableReveals((current) => [
-                  ...current,
-                  {
-                    playerId: event.playerId,
-                    slot: event.slot,
-                    card: event.card,
-                  },
-                ]);
-              }
-              if (event.type === "match_failed") {
-                setTableReveals(
-                  event.revealed.map((each) => ({
-                    playerId: event.playerId,
-                    slot: each.slot,
-                    card: each.card,
-                  })),
-                );
-              }
-              if (event.type === "match_succeeded") {
-                setTableReveals(
-                  event.slots.map((slot) => ({
-                    playerId: event.playerId,
-                    slot,
-                    card: event.matchedValue,
-                  })),
-                );
-              }
-            }
+          case "events": {
+            const you = youRef.current;
+            if (!you) break;
 
-            setReveals((current) => {
-              const you = youRef.current;
-              if (!you) return current;
-
-              const scope = phaseRef.current === "peeking" ? "peekPhase" : "turn";
-              return message.events.reduce(
-                (acc, event) => applyEvent(acc, event, scope, you),
+            const scope = phaseRef.current === "peeking" ? "peekPhase" : "turn";
+            setDisplay((current) =>
+              message.events.reduce(
+                (acc, event) => applyClientEvent(acc, event, scope, you),
                 current,
-              );
-            });
+              ),
+            );
             break;
+          }
 
           case "error":
             setError({ message: message.message, at: Date.now() });
@@ -135,13 +110,12 @@ export function useGame(): Game {
     if (!view) return;
 
     if (phaseRef.current === "peeking" && view.phase !== "peeking") {
-      setReveals((current) => forgetScope(current, "peekPhase"));
+      setDisplay(onPeekPhaseEnded);
     }
     if (turnRef.current !== null && turnRef.current !== view.currentPlayerId) {
       // The look you earned dies with the turn that earned it — from here on
       // it is yours to remember, not the client's.
-      setReveals((current) => forgetScope(current, "turn"));
-      setTableReveals([]);
+      setDisplay(onTurnChanged);
     }
 
     phaseRef.current = view.phase;
@@ -167,16 +141,14 @@ export function useGame(): Game {
     view,
     timer,
     cardAt: useCallback(
-      (playerId, slot) => revealed(reveals, playerId, slot),
-      [reveals],
+      (playerId, slot) => revealed(display.reveals, playerId, slot),
+      [display],
     ),
     faceUpAt: useCallback(
-      (playerId, slot) =>
-        tableReveals.find(
-          (each) => each.playerId === playerId && each.slot === slot,
-        )?.card ?? null,
-      [tableReveals],
+      (playerId, slot) => faceUpInHand(display, playerId, slot),
+      [display],
     ),
+    pileFan: display.pileFan,
     createRoom: useCallback((nickname) => {
       connection.current?.send({ type: "create_room", nickname });
     }, []),
