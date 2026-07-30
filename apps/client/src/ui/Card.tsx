@@ -8,6 +8,12 @@ interface CardProps {
   highlighted?: boolean;
   small?: boolean;
   onSelect?: () => void;
+  /**
+   * Called the moment the card is pressed, before any value arrives — this is
+   * what spends a peek, so that holding a card *is* looking at it rather than
+   * a separate step.
+   */
+  onHold?: () => void;
 }
 
 /**
@@ -22,10 +28,14 @@ export function Card({
   highlighted = false,
   small = false,
   onSelect,
+  onHold,
 }: CardProps) {
   const [held, setHeld] = useState(false);
 
-  const hold = useCallback(() => setHeld(true), []);
+  const hold = useCallback(() => {
+    setHeld(true);
+    onHold?.();
+  }, [onHold]);
   const release = useCallback(() => setHeld(false), []);
 
   if (empty) {

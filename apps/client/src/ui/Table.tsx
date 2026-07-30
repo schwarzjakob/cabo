@@ -46,13 +46,17 @@ export function Table({ game }: { game: Game }) {
         : [...current, slot],
     );
 
+  /** Pressing a card is looking at it: the first press spends a peek. */
+  const onHoldOwnSlot = (slot: number) => {
+    if (view.phase !== "peeking") return;
+    if (yours.peeksUsed.includes(slot)) return;
+    if (yours.peeksUsed.length >= 2) return;
+
+    game.act({ type: "peek_card", slot });
+  };
+
   const onOwnSlot = (slot: number) => {
-    if (view.phase === "peeking") {
-      if (!yours.peeksUsed.includes(slot) && yours.peeksUsed.length < 2) {
-        game.act({ type: "peek_card", slot });
-      }
-      return;
-    }
+    if (view.phase === "peeking") return;
     if (!yourTurn) return;
 
     if (mode.kind === "power" && mode.power === "peek") {
@@ -63,7 +67,10 @@ export function Table({ game }: { game: Game }) {
       setMode({ ...mode, ownSlot: slot });
       return;
     }
-    if (mode.kind === "place") toggle(slot);
+
+    // Holding a drawn card is itself a placement context — there is no
+    // separate step to enter first.
+    if (mode.kind === "place" || holding) toggle(slot);
   };
 
   const onOpponentSlot = (playerId: PlayerId, slot: number) => {
@@ -173,6 +180,15 @@ export function Table({ game }: { game: Game }) {
               {heldPower ? heldPower.toUpperCase() : "In hand"}
             </span>
           </div>
+        ) : view.someoneIsHolding ? (
+          // Everyone can see that a card has been drawn and is being decided
+          // over — just not which card it is.
+          <div className="pile pile--held">
+            <div className="card card--back card--held">?</div>
+            <span className="pile__label">
+              {nicknameOf(view.currentPlayerId ?? "")} is deciding
+            </span>
+          </div>
         ) : null}
 
         <div className="pile">
@@ -199,6 +215,7 @@ export function Table({ game }: { game: Game }) {
                 view.phase === "peeking" && yours.peeksUsed.includes(slot)
               }
               onSelect={() => onOwnSlot(slot)}
+              onHold={() => onHoldOwnSlot(slot)}
             />
           ))}
         </div>
@@ -208,7 +225,7 @@ export function Table({ game }: { game: Game }) {
         {view.phase === "peeking" ? (
           <>
             <p className="hint">
-              Tap two cards to look, hold to see them again, then confirm.
+              Hold a card to look at it — you get two. Then hit Ready.
             </p>
             <button
               type="button"

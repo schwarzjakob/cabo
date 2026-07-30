@@ -25,7 +25,9 @@ export interface Game {
 
 export function useGame(): Game {
   const [connected, setConnected] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; at: number } | null>(
+    null,
+  );
   const [youId, setYouId] = useState<PlayerId | null>(null);
   const [room, setRoom] = useState<RoomView | null>(null);
   const [view, setView] = useState<PlayerView | null>(null);
@@ -70,7 +72,7 @@ export function useGame(): Game {
             break;
 
           case "error":
-            setError(message.message);
+            setError({ message: message.message, at: Date.now() });
             break;
         }
       },
@@ -102,13 +104,20 @@ export function useGame(): Game {
     turnRef.current = view.currentPlayerId;
   }, [view]);
 
+  // A rejected move is a transient nudge, not a state you have to dismiss.
+  useEffect(() => {
+    if (!error) return;
+    const handle = setTimeout(() => setError(null), 4000);
+    return () => clearTimeout(handle);
+  }, [error]);
+
   const send = useCallback((action: Action) => {
     connection.current?.send({ type: "action", action });
   }, []);
 
   return {
     connected,
-    error,
+    error: error?.message ?? null,
     youId,
     room,
     view,

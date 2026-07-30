@@ -243,3 +243,64 @@ describe("reconnecting", () => {
     expect(room.viewFor(a!).players).toHaveLength(2);
   });
 });
+
+describe("bugs found in play", () => {
+  beforeEach(() => vi.useFakeTimers());
+
+  const intoPlay = () => {
+    const room = new Room("seed");
+    const ids = fullOf(room, 2);
+    room.start();
+    for (const id of ids) room.act(id, { type: "ready" });
+    return { room, ids, active: room.viewFor(ids[0]!).currentPlayerId! };
+  };
+
+  test("a timeout while holding a drawn card discards it rather than crashing", () => {
+    const { room, active } = intoPlay();
+    room.act(active, { type: "draw" });
+    const before = room.viewFor(active);
+
+    expect(() =>
+      vi.advanceTimersByTime(TURN_SECONDS * 1000 + 10),
+    ).not.toThrow();
+
+    const after = room.viewFor(active);
+    expect(after.currentPlayerId).not.toBe(active);
+    expect(after.heldCard).toBeNull();
+    expect(after.discardCount).toBe(before.discardCount + 1);
+  });
+
+  test("tells everyone when the peek window closes on its own", () => {
+    const room = new Room("seed");
+    fullOf(room, 2);
+    let notified = 0;
+    room.onChange(() => notified++);
+    room.start();
+
+    vi.advanceTimersByTime(PEEK_SECONDS * 1000 + 10);
+
+    expect(notified).toBeGreaterThan(0);
+  });
+
+  test("the turn clock belongs to the turn, not to each action in it", () => {
+    const { room, active } = intoPlay();
+    const deadline = room.timer()!.endsAt;
+
+    vi.advanceTimersByTime(5000);
+    room.act(active, { type: "draw" });
+
+    expect(room.timer()!.endsAt).toBe(deadline);
+  });
+
+  test("the clock restarts when the turn passes to someone else", () => {
+    const { room, active } = intoPlay();
+    const deadline = room.timer()!.endsAt;
+
+    vi.advanceTimersByTime(5000);
+    room.act(active, { type: "draw" });
+    room.act(active, { type: "discard_drawn" });
+
+    expect(room.timer()!.endsAt).toBeGreaterThan(deadline);
+    expect(room.timer()!.playerId).not.toBe(active);
+  });
+});

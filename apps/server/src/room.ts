@@ -188,16 +188,21 @@ export class Room {
   private startPeekTimer(): void {
     this.setTimer("peek", null, PEEK_SECONDS, () => {
       // Anyone still peeking is marked ready, which starts play.
-      const game = this.requireGame();
+      const events: GameEvent[] = [];
+
       for (const member of this.members) {
-        const player = game.players.find((each) => each.id === member.id);
+        const player = this.game?.players.find((each) => each.id === member.id);
         if (player && !player.ready) {
-          this.game = applyAction(this.game!, member.id, {
-            type: "ready",
-          }).state;
+          const result = applyAction(this.game!, member.id, { type: "ready" });
+          this.game = result.state;
+          events.push(...result.events);
         }
       }
+
       this.startTurnTimer();
+      // Without this the phase change never reaches anyone and the table
+      // simply freezes.
+      this.listener(events);
     });
   }
 
@@ -223,15 +228,25 @@ export class Room {
     if (!game || game.currentPlayerId === null) return;
 
     const playerId = game.currentPlayerId;
-    const drawn = applyAction(game, playerId, { type: "draw" });
-    const discarded = applyAction(drawn.state, playerId, {
-      type: "discard_drawn",
-    });
+    const events: GameEvent[] = [];
+    let state = game;
 
-    this.game = discarded.state;
+    // The player may already be holding a card they drew before running out of
+    // time — drawing a second one is illegal, so only draw when empty-handed.
+    if (state.heldCard === null) {
+      const drawn = applyAction(state, playerId, { type: "draw" });
+      state = drawn.state;
+      events.push(...drawn.events);
+    }
+
+    const discarded = applyAction(state, playerId, { type: "discard_drawn" });
+    state = discarded.state;
+    events.push(...discarded.events);
+
+    this.game = state;
     this.requireMember(playerId).consecutiveTimeouts += 1;
 
-    this.listener([...drawn.events, ...discarded.events]);
+    this.listener(events);
     this.rearmTimer();
   }
 
@@ -240,8 +255,15 @@ export class Room {
     if (!game) return this.clearTimer();
 
     if (game.phase === "peeking") return;
-    if (game.phase === "playing") return this.startTurnTimer();
-    this.clearTimer();
+    if (game.phase !== "playing") return this.clearTimer();
+
+    // The clock belongs to the turn, not to each action within it. Restarting
+    // it on every draw would hand the player an unlimited think.
+    const running = this.timerView;
+    if (running?.kind === "turn" && running.playerId === game.currentPlayerId) {
+      return;
+    }
+    this.startTurnTimer();
   }
 
   private setTimer(
@@ -252,7 +274,16 @@ export class Room {
   ): void {
     this.clearTimer();
     this.timerView = { kind, playerId, endsAt: Date.now() + seconds * 1000 };
-    this.timerHandle = setTimeout(onExpiry, seconds * 1000);
+    // A throw inside a timer callback is an unhandled exception that kills the
+    // whole process — one room's bug must not end everyone else's game.
+    this.timerHandle = setTimeout(() => {
+      try {
+        onExpiry();
+      } catch (error) {
+        console.error(`[room ${this.code}] timer failed`, error);
+        this.clearTimer();
+      }
+    }, seconds * 1000);
   }
 
   private clearTimer(): void {
