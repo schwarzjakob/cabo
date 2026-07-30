@@ -20,6 +20,11 @@ export interface PlayerView {
     slots: boolean[];
     totalScore: number;
     ready: boolean;
+    /**
+     * Which slots this player has looked at. Public on purpose: at a real
+     * table everyone watches you lift a particular card.
+     */
+    peeksUsed: number[];
   }[];
   drawPileCount: number;
   discardTop: Card | null;
@@ -45,6 +50,7 @@ export function viewFor(state: GameState, viewerId: PlayerId): PlayerView {
       slots: player.slots.map((card) => card !== null),
       totalScore: player.totalScore,
       ready: player.ready,
+      peeksUsed: [...player.peeksUsed],
     })),
     drawPileCount: state.drawPile.length,
     discardTop: state.discardPile[state.discardPile.length - 1] ?? null,

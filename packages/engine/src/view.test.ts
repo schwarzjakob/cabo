@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { GameEvent } from "./events.js";
-import { applyAction } from "./game.js";
+import { applyAction, createGame } from "./game.js";
 import { redactEvent, viewFor } from "./view.js";
 import { stack, startedGame } from "./test-helpers.js";
 
@@ -157,5 +157,16 @@ describe("redactEvent", () => {
     } as const;
 
     expect(redactEvent(swapped, "b")).toEqual(swapped);
+  });
+});
+
+describe("peek positions", () => {
+  test("shows which slots a player has looked at — public by design", () => {
+    const game = createGame({ playerIds: ["a", "b"], seed: 1 });
+    const peeked = applyAction(game, "a", { type: "peek_card", slot: 2 }).state;
+
+    const view = viewFor(peeked, "b");
+
+    expect(view.players.find((player) => player.id === "a")!.peeksUsed).toEqual([2]);
   });
 });

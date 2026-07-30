@@ -7,7 +7,7 @@ export type Placement =
    * Trade a 2-, 3- or 4-of-a-kind for this single card. `into` says which of
    * the matched slots keeps it; the rest are emptied.
    */
-  | { kind: "match"; slots: number[]; into: number };
+  | { kind: "match"; slots: readonly number[]; into: number };
 
 /** What a choice card's action is aimed at. */
 export type PowerTarget =
