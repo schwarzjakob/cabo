@@ -37,27 +37,33 @@ function randomAction(state: GameState, rng: () => number): Action | null {
     .filter((each) => each.card !== null)
     .map((each) => each.slot);
 
+  // A match part-way through must be finished before anything else.
+  const attempt = state.matchAttempt;
+  if (attempt) {
+    const untouched = filled.filter((slot) => !attempt.revealed.includes(slot));
+    if (attempt.revealed.length < 2 && untouched.length > 0) {
+      return { type: "reveal_for_match", slot: pick(untouched) };
+    }
+    if (rng() < 0.4 && untouched.length > 0) {
+      return { type: "reveal_for_match", slot: pick(untouched) };
+    }
+    return { type: "commit_match", into: attempt.revealed[0]! };
+  }
+
   if (state.heldCard === null) {
     if (rng() < 0.08 && state.caboCalledBy === null) return { type: "call_cabo" };
-    if (rng() < 0.3) {
-      return {
-        type: "take_discard",
-        target: { kind: "slot", slot: pick(filled) },
-      };
-    }
+    if (rng() < 0.3) return { type: "take_discard" };
     return { type: "draw" };
   }
 
   const roll = rng();
+  // Usually a bad match, which is exactly the path worth exercising.
   if (roll < 0.15 && filled.length >= 2) {
-    // Usually a bad match, which is exactly the path worth exercising.
-    const slots = [filled[0]!, filled[1]!];
-    return {
-      type: "place_drawn",
-      target: { kind: "match", slots, into: slots[0]! },
-    };
+    return { type: "reveal_for_match", slot: filled[0]! };
   }
-  if (roll < 0.45) return { type: "discard_drawn" };
+  if (roll < 0.45 && state.heldFrom === "draw") {
+    return { type: "discard_drawn" };
+  }
   return {
     type: "place_drawn",
     target: { kind: "slot", slot: pick(filled) },

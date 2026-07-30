@@ -119,41 +119,39 @@ describe("discarding a drawn card", () => {
 });
 
 describe("taking the top of the discard pile", () => {
-  test("puts the discarded card into the chosen slot", () => {
-    const { state } = applyAction(board(), "a", {
-      type: "take_discard",
+  const takenThenPlaced = () => {
+    const taken = applyAction(board(), "a", { type: "take_discard" }).state;
+    return applyAction(taken, "a", {
+      type: "place_drawn",
       target: { kind: "slot", slot: 0 },
-    });
+    }).state;
+  };
 
-    expect(handOf(state, "a")).toEqual([4, 2, 3, 4]);
+  test("puts the discarded card into the chosen slot", () => {
+    expect(handOf(takenThenPlaced(), "a")).toEqual([4, 2, 3, 4]);
   });
 
   test("leaves the replaced card as the new top discard", () => {
-    const { state } = applyAction(board(), "a", {
-      type: "take_discard",
-      target: { kind: "slot", slot: 0 },
-    });
-
-    expect(state.discardPile).toEqual([1]);
+    expect(takenThenPlaced().discardPile).toEqual([1]);
   });
 
   test("passes the turn on", () => {
-    const { state } = applyAction(board(), "a", {
-      type: "take_discard",
-      target: { kind: "slot", slot: 0 },
-    });
+    expect(takenThenPlaced().currentPlayerId).toBe("b");
+  });
 
-    expect(state.currentPlayerId).toBe("b");
+  test("cannot simply be thrown away again", () => {
+    const taken = applyAction(board(), "a", { type: "take_discard" }).state;
+
+    expect(() => applyAction(taken, "a", { type: "discard_drawn" })).toThrow(
+      /into your hand/i,
+    );
   });
 
   test("rejects taking from the discard pile while holding a drawn card", () => {
     const state = applyAction(board(), "a", { type: "draw" }).state;
 
-    expect(() =>
-      applyAction(state, "a", {
-        type: "take_discard",
-        target: { kind: "slot", slot: 0 },
-      }),
-    ).toThrow(/holding/i);
+    expect(() => applyAction(state, "a", { type: "take_discard" })).toThrow(
+      /holding/i,
+    );
   });
 });

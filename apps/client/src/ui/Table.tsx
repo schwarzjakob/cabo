@@ -11,14 +11,14 @@ const TURN_SECONDS = 60;
 /** What the player is in the middle of doing. Purely local to this client. */
 type Mode =
   | { kind: "idle" }
-  | { kind: "place"; source: "drawn" | "discard" }
+  | { kind: "replace" }
+  | { kind: "match" }
   | { kind: "power"; power: "peek" | "spy" | "swap"; ownSlot?: number };
 
 export function Table({ game }: { game: Game }) {
   const view = game.view!;
   const you = game.youId!;
   const [mode, setMode] = useState<Mode>({ kind: "idle" });
-  const [selection, setSelection] = useState<number[]>([]);
 
   const yourTurn = view.currentPlayerId === you;
   const holding = view.heldCard !== null;
@@ -26,7 +26,6 @@ export function Table({ game }: { game: Game }) {
   // Reset the local intent whenever the turn or the held card changes under us.
   useEffect(() => {
     setMode({ kind: "idle" });
-    setSelection([]);
   }, [
     view.currentPlayerId,
     view.phase,
@@ -44,12 +43,8 @@ export function Table({ game }: { game: Game }) {
     return <RoundSummary game={game} nicknameOf={nicknameOf} />;
   }
 
-  const toggle = (slot: number) =>
-    setSelection((current) =>
-      current.includes(slot)
-        ? current.filter((each) => each !== slot)
-        : [...current, slot],
-    );
+  const attempt = view.matchAttempt;
+  const revealed = attempt?.revealed ?? [];
 
   /** Pressing a card is looking at it: the first press spends a peek. */
   const onHoldOwnSlot = (slot: number) => {
@@ -77,7 +72,13 @@ export function Table({ game }: { game: Game }) {
 
     // Cards are inert until an action has been chosen — deciding what you are
     // doing comes before picking what you are doing it to.
-    if (mode.kind === "place") toggle(slot);
+    if (mode.kind === "replace") {
+      game.act({ type: "place_drawn", target: { kind: "slot", slot } });
+      return;
+    }
+    if (mode.kind === "match" && !revealed.includes(slot)) {
+      game.act({ type: "reveal_for_match", slot });
+    }
   };
 
   const onOpponentSlot = (playerId: PlayerId, slot: number) => {
@@ -98,26 +99,6 @@ export function Table({ game }: { game: Game }) {
         },
       });
     }
-  };
-
-  const commitPlacement = (source: "drawn" | "discard") => {
-    if (selection.length === 0) return;
-
-    const target =
-      selection.length === 1
-        ? ({ kind: "slot", slot: selection[0]! } as const)
-        : ({
-            kind: "match",
-            slots: [...selection],
-            into: selection[0]!,
-          } as const);
-
-    game.act(
-      source === "drawn"
-        ? { type: "place_drawn", target }
-        : { type: "take_discard", target },
-    );
-    setSelection([]);
   };
 
   const heldPower = view.heldCard === null ? null : powerOf(view.heldCard);
@@ -220,7 +201,7 @@ export function Table({ game }: { game: Game }) {
               empty={!filled}
               value={game.cardAt(you, slot)}
               faceUp={game.faceUpAt(you, slot)}
-              selected={selection.includes(slot)}
+              selected={revealed.includes(slot)}
               highlighted={
                 view.phase === "peeking" && yours.peeksUsed.includes(slot)
               }
@@ -284,35 +265,47 @@ export function Table({ game }: { game: Game }) {
               Cancel
             </button>
           </>
-        ) : mode.kind === "place" ? (
+        ) : mode.kind === "match" ? (
           <>
             <p className="hint">
-              {selection.length === 0
-                ? "Tap the card to replace — or tap several of the same number to trade them."
-                : selection.length === 1
-                  ? "Replace this one, or tap more to trade a match."
-                  : `Trade ${selection.length} cards — they turn face up for everyone.`}
+              {revealed.length === 0
+                ? "Turn over a card. Everyone sees it, and there is no taking it back."
+                : revealed.length === 1
+                  ? "Turn over a second — if they disagree you lose the turn."
+                  : "They match. Trade them, or risk one more."}
             </p>
             <div className="actions__row">
               <button
                 type="button"
                 className="button button--primary"
-                disabled={selection.length === 0}
-                onClick={() => commitPlacement(mode.source)}
+                disabled={revealed.length < 2}
+                onClick={() =>
+                  game.act({ type: "commit_match", into: revealed[0]! })
+                }
               >
-                {selection.length > 1 ? "Trade match" : "Replace"}
+                Trade {revealed.length > 0 ? revealed.length : ""}
               </button>
-              <button
-                type="button"
-                className="button"
-                onClick={() => {
-                  setMode({ kind: "idle" });
-                  setSelection([]);
-                }}
-              >
-                Back
-              </button>
+              {revealed.length === 0 ? (
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => setMode({ kind: "idle" })}
+                >
+                  Back
+                </button>
+              ) : null}
             </div>
+          </>
+        ) : mode.kind === "replace" ? (
+          <>
+            <p className="hint">Tap the card to replace.</p>
+            <button
+              type="button"
+              className="button"
+              onClick={() => setMode({ kind: "idle" })}
+            >
+              Back
+            </button>
           </>
         ) : holding ? (
           <>
@@ -323,26 +316,35 @@ export function Table({ game }: { game: Game }) {
               <button
                 type="button"
                 className="button button--primary"
-                onClick={() => setMode({ kind: "place", source: "drawn" })}
+                onClick={() => setMode({ kind: "replace" })}
               >
-                Keep
+                Replace
               </button>
-              {heldPower ? (
+              <button
+                type="button"
+                className="button"
+                onClick={() => setMode({ kind: "match" })}
+              >
+                Match
+              </button>
+              {heldPower && view.heldFrom === "draw" ? (
                 <button
                   type="button"
                   className="button"
                   onClick={() => setMode({ kind: "power", power: heldPower })}
                 >
-                  Use {heldPower}
+                  {heldPower}
                 </button>
               ) : null}
-              <button
-                type="button"
-                className="button"
-                onClick={() => game.act({ type: "discard_drawn" })}
-              >
-                Discard
-              </button>
+              {view.heldFrom === "draw" ? (
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => game.act({ type: "discard_drawn" })}
+                >
+                  Discard
+                </button>
+              ) : null}
             </div>
           </>
         ) : (
@@ -357,7 +359,7 @@ export function Table({ game }: { game: Game }) {
             <button
               type="button"
               className="button"
-              onClick={() => setMode({ kind: "place", source: "discard" })}
+              onClick={() => game.act({ type: "take_discard" })}
             >
               Take {view.discardTop}
             </button>

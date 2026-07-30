@@ -160,10 +160,16 @@ automatically — the beat is for absorbing information, not for stalling.
 **Actions are chosen before targets.** You pick Keep / Use power / Discard and
 *then* tap a card. Cards are inert until an action is chosen.
 
-**A match reveal is all-at-once and binding.** You select the whole set and
-confirm once; the cards then turn face up for everyone. Revealing them one at a
-time with the option to stop would hand the player free information whenever
-they did not match — and per the printed rules the reveal *is* the penalty.
+**A match is turned over one card at a time, and every reveal is binding.** You
+pick up a card, then flip your own cards one by one; each flip is public. The
+first card that disagrees with the others fails the attempt on the spot — cards
+back, replacement discarded, turn lost — which is exactly the printed penalty.
+
+There is no free information in this, because you cannot back out: a mismatch
+has already cost you the turn by the time you see it. Two guards keep it honest:
+**at least two cards must be turned over** (flipping one and stopping would be a
+free look), and there is no cancelling once the first card is face up. After two
+that match you may trade, or risk a third.
 
 ### Clock
 

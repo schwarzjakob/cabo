@@ -45,6 +45,17 @@ wss.on("connection", (socket) => {
         type: "error",
         message: error instanceof Error ? error.message : "Something went wrong",
       });
+
+      // Resend state after a rejection, so a client that has drifted out of
+      // step is put back in it rather than left guessing.
+      const room = session ? rooms.get(session.code) : undefined;
+      if (room?.hasStarted && session) {
+        send(socket, {
+          type: "state",
+          view: room.viewFor(session.playerId),
+          timer: room.timer(),
+        });
+      }
     }
   });
 

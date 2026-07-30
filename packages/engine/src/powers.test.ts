@@ -199,13 +199,22 @@ describe("power restrictions", () => {
       discard: [9],
     });
 
-    const { state } = applyAction(board, "a", {
-      type: "take_discard",
-      target: { kind: "slot", slot: 0 },
-    });
+    const taken = applyAction(board, "a", { type: "take_discard" }).state;
 
-    expect(handOf(state, "a")).toEqual([9, 2, 3, 4]);
-    expect(state.currentPlayerId).toBe("b");
+    expect(() =>
+      applyAction(taken, "a", {
+        type: "use_power",
+        target: { kind: "spy", playerId: "b", slot: 0 },
+      }),
+    ).toThrow(/never grants its power/i);
+
+    const placed = applyAction(taken, "a", {
+      type: "place_drawn",
+      target: { kind: "slot", slot: 0 },
+    }).state;
+
+    expect(handOf(placed, "a")).toEqual([9, 2, 3, 4]);
+    expect(placed.currentPlayerId).toBe("b");
   });
 
   test("using the power is optional — the card may be kept for points", () => {

@@ -4,13 +4,13 @@ import { stack, startedGame } from "./test-helpers.js";
 import type { Card } from "./deck.js";
 import type { GameState } from "./types.js";
 
-/** `a` holds `hand`, and draws `drawn` on its turn. */
-const drawnOnto = (hand: (Card | null)[], drawn: Card): GameState =>
+/** `a` holding `drawn`, with `hand` in front of them. */
+const holding = (hand: (Card | null)[], drawn: Card): GameState =>
   applyAction(
     stack(startedGame(["a", "b"]), {
       hands: { a: hand, b: [5, 6, 7, 8] },
       draw: [0, drawn],
-      discard: [10],
+      discard: [4],
     }),
     "a",
     { type: "draw" },
@@ -19,108 +19,65 @@ const drawnOnto = (hand: (Card | null)[], drawn: Card): GameState =>
 const handOf = (state: GameState, id: string) =>
   state.players.find((player) => player.id === id)!.slots;
 
-describe("successful match", () => {
-  test("empties the matched slots and fills the chosen one", () => {
-    const { state } = applyAction(drawnOnto([3, 3, 5, 6], 1), "a", {
-      type: "place_drawn",
-      target: { kind: "match", slots: [0, 1], into: 0 },
-    });
+const reveal = (state: GameState, slot: number) =>
+  applyAction(state, "a", { type: "reveal_for_match", slot });
 
-    expect(handOf(state, "a")).toEqual([1, null, 5, 6]);
-  });
-
-  test("puts the matched cards on the discard pile", () => {
-    const { state } = applyAction(drawnOnto([3, 3, 5, 6], 1), "a", {
-      type: "place_drawn",
-      target: { kind: "match", slots: [0, 1], into: 0 },
-    });
-
-    expect(state.discardPile).toEqual([10, 3, 3]);
-  });
-
-  test("shrinks a hand to two cards on a three-of-a-kind", () => {
-    const { state } = applyAction(drawnOnto([4, 4, 4, 6], 1), "a", {
-      type: "place_drawn",
-      target: { kind: "match", slots: [0, 1, 2], into: 2 },
-    });
-
-    expect(handOf(state, "a")).toEqual([null, null, 1, 6]);
-  });
-
-  test("shrinks a hand to one card on a four-of-a-kind", () => {
-    const { state } = applyAction(drawnOnto([2, 2, 2, 2], 1), "a", {
-      type: "place_drawn",
-      target: { kind: "match", slots: [0, 1, 2, 3], into: 3 },
-    });
-
-    expect(handOf(state, "a")).toEqual([null, null, null, 1]);
-  });
-
-  test("reports the matched value, which everyone can see on the pile", () => {
-    const { events } = applyAction(drawnOnto([3, 3, 5, 6], 1), "a", {
-      type: "place_drawn",
-      target: { kind: "match", slots: [0, 1], into: 0 },
-    });
+describe("revealing cards one at a time", () => {
+  test("turns the card face up for everyone", () => {
+    const { events } = reveal(holding([3, 3, 5, 6], 1), 0);
 
     expect(events).toContainEqual({
-      type: "match_succeeded",
+      type: "match_revealed",
       playerId: "a",
-      slots: [0, 1],
-      into: 0,
-      matchedValue: 3,
+      slot: 0,
+      card: 3,
     });
   });
 
-  test("holds the turn open so the table can see the traded cards", () => {
-    const { state } = applyAction(drawnOnto([3, 3, 5, 6], 1), "a", {
-      type: "place_drawn",
-      target: { kind: "match", slots: [0, 1], into: 0 },
-    });
+  test("keeps the card in place until the trade is committed", () => {
+    const { state } = reveal(holding([3, 3, 5, 6], 1), 0);
 
-    expect(state.currentPlayerId).toBe("a");
-    expect(state.turnStage).toBe("resolving");
+    expect(handOf(state, "a")).toEqual([3, 3, 5, 6]);
   });
 
-  test("passes the turn on once the player is done", () => {
-    const matched = applyAction(drawnOnto([3, 3, 5, 6], 1), "a", {
-      type: "place_drawn",
-      target: { kind: "match", slots: [0, 1], into: 0 },
-    }).state;
+  test("remembers what has been turned over so far", () => {
+    let state = reveal(holding([3, 3, 5, 6], 1), 0).state;
+    state = reveal(state, 1).state;
 
-    expect(applyAction(matched, "a", { type: "end_turn" }).state.currentPlayerId)
-      .toBe("b");
+    expect(state.matchAttempt?.revealed).toEqual([0, 1]);
   });
 
-  test("works with a card taken from the discard pile", () => {
+  test("refuses to turn the same card over twice", () => {
+    const state = reveal(holding([3, 3, 5, 6], 1), 0).state;
+
+    expect(() => reveal(state, 0)).toThrow(/already/i);
+  });
+
+  test("refuses a slot emptied by an earlier match", () => {
+    expect(() => reveal(holding([3, null, 5, 6], 1), 1)).toThrow(/empty/i);
+  });
+
+  test("cannot start without a card to trade for", () => {
     const board = stack(startedGame(["a", "b"]), {
       hands: { a: [3, 3, 5, 6], b: [5, 6, 7, 8] },
-      draw: [0, 0],
-      discard: [1],
+      draw: [0, 1],
+      discard: [4],
     });
 
-    const { state } = applyAction(board, "a", {
-      type: "take_discard",
-      target: { kind: "match", slots: [0, 1], into: 1 },
-    });
-
-    expect(handOf(state, "a")).toEqual([null, 1, 5, 6]);
-    expect(state.discardPile).toEqual([3, 3]);
+    expect(() =>
+      applyAction(board, "a", { type: "reveal_for_match", slot: 0 }),
+    ).toThrow(/not holding/i);
   });
 });
 
-describe("failed match", () => {
-  const failed = () =>
-    applyAction(drawnOnto([3, 4, 5, 6], 1), "a", {
-      type: "place_drawn",
-      target: { kind: "match", slots: [0, 1], into: 0 },
-    });
+describe("a reveal that breaks the match", () => {
+  const broken = () => {
+    const state = reveal(holding([3, 4, 5, 6], 1), 0).state;
+    return reveal(state, 1);
+  };
 
-  test("puts every attempted card back where it was", () => {
-    expect(handOf(failed().state, "a")).toEqual([3, 4, 5, 6]);
-  });
-
-  test("shows the attempted cards to everyone at the table", () => {
-    expect(failed().events).toContainEqual({
+  test("fails the attempt the moment the cards disagree", () => {
+    expect(broken().events).toContainEqual({
       type: "match_failed",
       playerId: "a",
       revealed: [
@@ -131,69 +88,125 @@ describe("failed match", () => {
     });
   });
 
-  test("discards the attempted replacement card", () => {
-    expect(failed().state.discardPile).toEqual([10, 1]);
+  test("puts every revealed card back where it was", () => {
+    expect(handOf(broken().state, "a")).toEqual([3, 4, 5, 6]);
   });
 
-  test("loses the turn once the reveal has been seen", () => {
-    const shown = failed().state;
+  test("discards the card that was going to be traded in", () => {
+    expect(broken().state.discardPile).toEqual([4, 1]);
+  });
 
-    expect(shown.turnStage).toBe("resolving");
-    expect(applyAction(shown, "a", { type: "end_turn" }).state.currentPlayerId)
+  test("loses the turn, once the table has seen it", () => {
+    const { state } = broken();
+
+    expect(state.turnStage).toBe("resolving");
+    expect(state.matchAttempt).toBeNull();
+    expect(applyAction(state, "a", { type: "end_turn" }).state.currentPlayerId)
       .toBe("b");
   });
+});
 
-  test("also applies to a card taken from the discard pile", () => {
+describe("committing a match", () => {
+  const twoOfAKind = () => {
+    const state = reveal(holding([3, 3, 5, 6], 1), 0).state;
+    return reveal(state, 1).state;
+  };
+
+  test("empties the traded slots and fills the chosen one", () => {
+    const { state } = applyAction(twoOfAKind(), "a", {
+      type: "commit_match",
+      into: 0,
+    });
+
+    expect(handOf(state, "a")).toEqual([1, null, 5, 6]);
+  });
+
+  test("puts the traded cards on the discard pile", () => {
+    const { state } = applyAction(twoOfAKind(), "a", {
+      type: "commit_match",
+      into: 0,
+    });
+
+    expect(state.discardPile).toEqual([4, 3, 3]);
+  });
+
+  test("holds the turn open so the table can take it in", () => {
+    const { state } = applyAction(twoOfAKind(), "a", {
+      type: "commit_match",
+      into: 0,
+    });
+
+    expect(state.currentPlayerId).toBe("a");
+    expect(state.turnStage).toBe("resolving");
+  });
+
+  test("needs at least two cards turned over", () => {
+    const one = reveal(holding([3, 3, 5, 6], 1), 0).state;
+
+    expect(() =>
+      applyAction(one, "a", { type: "commit_match", into: 0 }),
+    ).toThrow(/at least two/i);
+  });
+
+  test("must put the replacement into one of the revealed slots", () => {
+    expect(() =>
+      applyAction(twoOfAKind(), "a", { type: "commit_match", into: 2 }),
+    ).toThrow(/one of the/i);
+  });
+
+  test("lets a third card be risked after two already match", () => {
+    let state = reveal(holding([4, 4, 4, 6], 1), 0).state;
+    state = reveal(state, 1).state;
+    state = reveal(state, 2).state;
+
+    const { state: traded } = applyAction(state, "a", {
+      type: "commit_match",
+      into: 2,
+    });
+
+    expect(handOf(traded, "a")).toEqual([null, null, 1, 6]);
+  });
+
+  test("punishes a third card that does not match, after two that did", () => {
+    let state = reveal(holding([4, 4, 9, 6], 1), 0).state;
+    state = reveal(state, 1).state;
+    const { state: failed } = reveal(state, 2);
+
+    expect(handOf(failed, "a")).toEqual([4, 4, 9, 6]);
+    expect(failed.matchAttempt).toBeNull();
+  });
+
+  test("works with a card taken from the discard pile", () => {
     const board = stack(startedGame(["a", "b"]), {
-      hands: { a: [3, 4, 5, 6], b: [5, 6, 7, 8] },
+      hands: { a: [3, 3, 5, 6], b: [5, 6, 7, 8] },
       draw: [0, 0],
       discard: [1],
     });
 
-    const { state } = applyAction(board, "a", {
-      type: "take_discard",
-      target: { kind: "match", slots: [0, 1], into: 0 },
-    });
+    let state = applyAction(board, "a", { type: "take_discard" }).state;
+    state = applyAction(state, "a", { type: "reveal_for_match", slot: 0 }).state;
+    state = applyAction(state, "a", { type: "reveal_for_match", slot: 1 }).state;
+    state = applyAction(state, "a", { type: "commit_match", into: 1 }).state;
 
-    expect(handOf(state, "a")).toEqual([3, 4, 5, 6]);
-    expect(state.discardPile).toEqual([1]);
+    expect(handOf(state, "a")).toEqual([null, 1, 5, 6]);
   });
 });
 
-describe("invalid match attempts", () => {
-  test("rejects a single slot — that is an ordinary replacement", () => {
+describe("while a match is being revealed", () => {
+  const midReveal = () => reveal(holding([3, 3, 5, 6], 1), 0).state;
+
+  test("the card cannot simply be discarded instead", () => {
     expect(() =>
-      applyAction(drawnOnto([3, 3, 5, 6], 1), "a", {
-        type: "place_drawn",
-        target: { kind: "match", slots: [0], into: 0 },
-      }),
-    ).toThrow(/at least two/i);
+      applyAction(midReveal(), "a", { type: "discard_drawn" }),
+    ).toThrow(/match/i);
   });
 
-  test("rejects a target slot outside the matched set", () => {
+  test("the card cannot be quietly placed in a slot instead", () => {
     expect(() =>
-      applyAction(drawnOnto([3, 3, 5, 6], 1), "a", {
+      applyAction(midReveal(), "a", {
         type: "place_drawn",
-        target: { kind: "match", slots: [0, 1], into: 2 },
+        target: { kind: "slot", slot: 3 },
       }),
-    ).toThrow(/one of the matched/i);
-  });
-
-  test("rejects the same slot listed twice", () => {
-    expect(() =>
-      applyAction(drawnOnto([3, 3, 5, 6], 1), "a", {
-        type: "place_drawn",
-        target: { kind: "match", slots: [0, 0], into: 0 },
-      }),
-    ).toThrow(/twice/i);
-  });
-
-  test("rejects an already emptied slot", () => {
-    expect(() =>
-      applyAction(drawnOnto([3, null, 5, 6], 1), "a", {
-        type: "place_drawn",
-        target: { kind: "match", slots: [0, 1], into: 0 },
-      }),
-    ).toThrow(/empty/i);
+    ).toThrow(/match/i);
   });
 });

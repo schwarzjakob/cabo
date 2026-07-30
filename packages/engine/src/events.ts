@@ -43,6 +43,7 @@ export type GameEvent =
       targetPlayerId: PlayerId;
       targetSlot: number;
     }
+  | { type: "match_revealed"; playerId: PlayerId; slot: number; card: Card }
   | { type: "cabo_called"; playerId: PlayerId }
   /** The turn is being held open while this player takes in what they saw. */
   | { type: "awaiting_done"; playerId: PlayerId }

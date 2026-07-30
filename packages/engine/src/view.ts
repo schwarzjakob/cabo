@@ -33,6 +33,16 @@ export interface PlayerView {
   discardCount: number;
   /** The card you drew and have not yet resolved. Null for everyone else. */
   heldCard: Card | null;
+  /**
+   * Which pile your held card came from — a card off the discard pile has no
+   * power and cannot be thrown away again. Null for everyone else.
+   */
+  heldFrom: "draw" | "discard" | null;
+  /**
+   * A match being turned over. The slots are public: everyone at the table can
+   * see which cards are face up.
+   */
+  matchAttempt: { playerId: PlayerId; revealed: number[] } | null;
   /** So other players can see that the turn is mid-decision. */
   someoneIsHolding: boolean;
   /** Populated only once the round is scored and everyone flips. */
@@ -59,6 +69,13 @@ export function viewFor(state: GameState, viewerId: PlayerId): PlayerView {
     discardTop: state.discardPile[state.discardPile.length - 1] ?? null,
     discardCount: state.discardPile.length,
     heldCard: state.currentPlayerId === viewerId ? state.heldCard : null,
+    heldFrom: state.currentPlayerId === viewerId ? state.heldFrom : null,
+    matchAttempt: state.matchAttempt
+      ? {
+          playerId: state.matchAttempt.playerId,
+          revealed: [...state.matchAttempt.revealed],
+        }
+      : null,
     someoneIsHolding: state.heldCard !== null,
     revealedHands: roundIsOver
       ? state.players.map((player) => ({

@@ -1,13 +1,7 @@
 import type { PlayerId } from "./types.js";
 
 /** Where a card being put into a hand should go. */
-export type Placement =
-  | { kind: "slot"; slot: number }
-  /**
-   * Trade a 2-, 3- or 4-of-a-kind for this single card. `into` says which of
-   * the matched slots keeps it; the rest are emptied.
-   */
-  | { kind: "match"; slots: readonly number[]; into: number };
+export type Placement = { kind: "slot"; slot: number };
 
 /** What a choice card's action is aimed at. */
 export type PowerTarget =
@@ -27,7 +21,11 @@ export type Action =
   | { type: "draw" }
   | { type: "place_drawn"; target: Placement }
   | { type: "discard_drawn" }
-  | { type: "take_discard"; target: Placement }
+  | { type: "take_discard" }
+  /** Turn one of your own cards face up as part of a match attempt. */
+  | { type: "reveal_for_match"; slot: number }
+  /** Trade every revealed card for the one in hand, which lands in `into`. */
+  | { type: "commit_match"; into: number }
   | { type: "use_power"; target: PowerTarget }
   | { type: "call_cabo" }
   /** Finish a turn that was held open so you could look at something. */

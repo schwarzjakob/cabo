@@ -46,20 +46,19 @@ describe("actions that tell you something hold the turn open", () => {
   });
 
   test("a successful match holds the turn open so the table can see it", () => {
-    const { state } = applyAction(drawnOnto([3, 3, 5, 6], 1), "a", {
-      type: "place_drawn",
-      target: { kind: "match", slots: [0, 1], into: 0 },
-    });
+    let state = drawnOnto([3, 3, 5, 6], 1);
+    state = applyAction(state, "a", { type: "reveal_for_match", slot: 0 }).state;
+    state = applyAction(state, "a", { type: "reveal_for_match", slot: 1 }).state;
+    state = applyAction(state, "a", { type: "commit_match", into: 0 }).state;
 
     expect(state.currentPlayerId).toBe("a");
     expect(state.turnStage).toBe("resolving");
   });
 
   test("a failed match holds the turn open too", () => {
-    const { state } = applyAction(drawnOnto([3, 4, 5, 6], 1), "a", {
-      type: "place_drawn",
-      target: { kind: "match", slots: [0, 1], into: 0 },
-    });
+    let state = drawnOnto([3, 4, 5, 6], 1);
+    state = applyAction(state, "a", { type: "reveal_for_match", slot: 0 }).state;
+    state = applyAction(state, "a", { type: "reveal_for_match", slot: 1 }).state;
 
     expect(state.turnStage).toBe("resolving");
   });
@@ -91,8 +90,9 @@ describe("ordinary actions still pass the turn straight on", () => {
       discard: [9],
     });
 
-    const { state } = applyAction(board, "a", {
-      type: "take_discard",
+    const taken = applyAction(board, "a", { type: "take_discard" }).state;
+    const { state } = applyAction(taken, "a", {
+      type: "place_drawn",
       target: { kind: "slot", slot: 0 },
     });
 

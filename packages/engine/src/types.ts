@@ -6,6 +6,12 @@ export type Phase = "peeking" | "playing" | "roundOver" | "gameOver";
 
 export type TurnStage = "acting" | "resolving";
 
+export interface MatchAttempt {
+  playerId: PlayerId;
+  /** Slots turned over so far, in the order they were turned. */
+  revealed: number[];
+}
+
 export interface PlayerState {
   readonly id: PlayerId;
   /**
@@ -36,6 +42,17 @@ export interface GameState {
    * between a `draw` and the action that disposes of it.
    */
   heldCard: Card | null;
+  /**
+   * Which pile the held card came from. A card taken off the discard pile
+   * never grants its power and cannot simply be thrown away again.
+   */
+  heldFrom: "draw" | "discard" | null;
+  /**
+   * A match being turned over one card at a time. Each reveal is public, and
+   * the first card that disagrees fails the whole attempt — which is why there
+   * is no free information in revealing them one by one.
+   */
+  matchAttempt: MatchAttempt | null;
   /**
    * `resolving` means the current player has done something that told them (or
    * the table) something — a Peek, Spy, Swap or a match — and the turn is

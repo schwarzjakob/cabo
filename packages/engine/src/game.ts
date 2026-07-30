@@ -44,6 +44,8 @@ export function createGame({ playerIds, seed }: CreateGameOptions): GameState {
     phase: "peeking",
     currentPlayerId: null,
     heldCard: null,
+    heldFrom: null,
+    matchAttempt: null,
     turnStage: "acting",
     caboCalledBy: null,
     firstPlayerId: players[0]!.id,
@@ -134,33 +136,51 @@ function applyPlayingAction(
       requireEmptyHand(state);
       const card = takeFromDrawPile(state, events);
       state.heldCard = card;
+      state.heldFrom = "draw";
       events.push({ type: "drew", playerId: player.id, card });
-      return;
-    }
-
-    case "place_drawn": {
-      const card = requireHeldCard(state);
-      state.heldCard = null;
-      place(state, player, card, action.target, events);
-      finishAction(state, action.target.kind === "match", events);
-      return;
-    }
-
-    case "discard_drawn": {
-      const card = requireHeldCard(state);
-      state.heldCard = null;
-      state.discardPile.push(card);
-      events.push({ type: "discarded", playerId: player.id, card });
-      endTurn(state, events);
       return;
     }
 
     case "take_discard": {
       requireEmptyHand(state);
       const card = state.discardPile.pop()!;
+      state.heldCard = card;
+      state.heldFrom = "discard";
       events.push({ type: "took_discard", playerId: player.id, card });
+      return;
+    }
+
+    case "place_drawn": {
+      requireNoMatchInProgress(state);
+      const card = requireHeldCard(state);
+      clearHeld(state);
       place(state, player, card, action.target, events);
-      finishAction(state, action.target.kind === "match", events);
+      endTurn(state, events);
+      return;
+    }
+
+    case "discard_drawn": {
+      requireNoMatchInProgress(state);
+      const card = requireHeldCard(state);
+      if (state.heldFrom === "discard") {
+        throw new IllegalMove(
+          "A card taken from the discard pile must go into your hand",
+        );
+      }
+      clearHeld(state);
+      state.discardPile.push(card);
+      events.push({ type: "discarded", playerId: player.id, card });
+      endTurn(state, events);
+      return;
+    }
+
+    case "reveal_for_match": {
+      revealForMatch(state, player, action.slot, events);
+      return;
+    }
+
+    case "commit_match": {
+      commitMatch(state, player, action.into, events);
       return;
     }
 
@@ -177,8 +197,14 @@ function applyPlayingAction(
 
     case "use_power": {
       const card = requireHeldCard(state);
+      requireNoMatchInProgress(state);
+      if (state.heldFrom === "discard") {
+        throw new IllegalMove(
+          "A card taken from the discard pile never grants its power",
+        );
+      }
       usePower(state, player, card, action.target, events);
-      state.heldCard = null;
+      clearHeld(state);
       state.discardPile.push(card);
       events.push({ type: "discarded", playerId: player.id, card });
       finishAction(state, true, events);
@@ -280,11 +306,6 @@ function place(
   target: Placement,
   events: GameEvent[],
 ): void {
-  if (target.kind === "match") {
-    placeAsMatch(state, player, card, target.slots, target.into, events);
-    return;
-  }
-
   const { slot } = target;
   const replaced = requireCardAt(player, slot);
 
@@ -294,62 +315,103 @@ function place(
 }
 
 /**
- * A 2-, 3- or 4-of-a-kind traded for one card. If the cards do not actually
- * match, the attempt is public: everyone sees them, they go back where they
- * were, the replacement is discarded and the turn is lost.
+ * Turn one of your own cards face up as part of a match attempt. Every reveal
+ * is public and binding: the first card that disagrees with the others fails
+ * the attempt on the spot, which is exactly the printed penalty.
  */
-function placeAsMatch(
+function revealForMatch(
   state: GameState,
   player: PlayerState,
-  card: Card,
-  slots: readonly number[],
+  slot: number,
+  events: GameEvent[],
+): void {
+  const heldCard = requireHeldCard(state);
+  const attempt = state.matchAttempt ?? { playerId: player.id, revealed: [] };
+
+  if (attempt.revealed.includes(slot)) {
+    throw new IllegalMove(`Slot ${slot} is already turned over`);
+  }
+
+  const card = requireCardAt(player, slot);
+  attempt.revealed.push(slot);
+  state.matchAttempt = attempt;
+
+  events.push({
+    type: "match_revealed",
+    playerId: player.id,
+    slot,
+    card,
+  });
+
+  const shown = attempt.revealed.map((each) => ({
+    slot: each,
+    card: player.slots[each]!,
+  }));
+
+  if (shown.every((each) => each.card === shown[0]!.card)) return;
+
+  // They disagree: cards stay where they are, the replacement is discarded,
+  // and the turn is gone.
+  state.matchAttempt = null;
+  clearHeld(state);
+  state.discardPile.push(heldCard);
+  events.push({
+    type: "match_failed",
+    playerId: player.id,
+    revealed: shown,
+    discarded: heldCard,
+  });
+  finishAction(state, true, events);
+}
+
+/** Trade every revealed card for the one in hand. */
+function commitMatch(
+  state: GameState,
+  player: PlayerState,
   into: number,
   events: GameEvent[],
 ): void {
-  if (slots.length < 2) {
-    throw new IllegalMove("A match needs at least two cards");
+  const heldCard = requireHeldCard(state);
+  const attempt = state.matchAttempt;
+  if (!attempt || attempt.revealed.length < 2) {
+    throw new IllegalMove("A match needs at least two cards turned over");
   }
-  if (new Set(slots).size !== slots.length) {
-    throw new IllegalMove("A match cannot list the same slot twice");
-  }
-  if (!slots.includes(into)) {
+  if (!attempt.revealed.includes(into)) {
     throw new IllegalMove(
-      "The replacement must go into one of the matched slots",
+      "The replacement must go into one of the revealed slots",
     );
   }
 
-  const attempted = slots.map((slot) => ({
-    slot,
-    card: requireCardAt(player, slot),
-  }));
+  const matchedValue = player.slots[attempt.revealed[0]!]!;
 
-  const matchedValue = attempted[0]!.card;
-  const isMatch = attempted.every((each) => each.card === matchedValue);
-
-  if (!isMatch) {
-    state.discardPile.push(card);
-    events.push({
-      type: "match_failed",
-      playerId: player.id,
-      revealed: attempted,
-      discarded: card,
-    });
-    return;
-  }
-
-  for (const { slot, card: matched } of attempted) {
+  for (const slot of attempt.revealed) {
+    state.discardPile.push(player.slots[slot]!);
     player.slots[slot] = null;
-    state.discardPile.push(matched);
   }
-  player.slots[into] = card;
+  player.slots[into] = heldCard;
+
+  state.matchAttempt = null;
+  clearHeld(state);
 
   events.push({
     type: "match_succeeded",
     playerId: player.id,
-    slots: [...slots],
+    slots: [...attempt.revealed],
     into,
     matchedValue,
   });
+  finishAction(state, true, events);
+}
+
+function requireNoMatchInProgress(state: GameState): void {
+  if (state.matchAttempt !== null) {
+    throw new IllegalMove("Finish the match you started");
+  }
+}
+
+function clearHeld(state: GameState): void {
+  state.heldCard = null;
+  state.heldFrom = null;
 }
 
 /**

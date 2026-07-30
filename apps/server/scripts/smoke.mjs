@@ -127,7 +127,7 @@ class Bot {
     const other = view.players.find((p) => p.id !== this.id);
 
     // Exercise the paths that hold a turn open: powers and match attempts.
-    if (power && Math.random() < 0.7) {
+    if (power && view.heldFrom === "draw" && Math.random() < 0.7) {
       const target =
         power === "peek"
           ? { kind: "peek", slot: filled[0] }
@@ -143,19 +143,33 @@ class Bot {
       return;
     }
 
+    // Sequential match: turn cards over one at a time, then trade or bust.
+    const attempt = view.matchAttempt;
+    if (attempt) {
+      const untouched = filled.filter((s) => !attempt.revealed.includes(s));
+      if (attempt.revealed.length < 2 && untouched.length > 0) {
+        this.send({
+          type: "action",
+          action: { type: "reveal_for_match", slot: untouched[0] },
+        });
+      } else {
+        this.send({
+          type: "action",
+          action: { type: "commit_match", into: attempt.revealed[0] },
+        });
+      }
+      return;
+    }
+
     if (filled.length >= 2 && Math.random() < 0.2) {
-      const slots = [filled[0], filled[1]];
       this.send({
         type: "action",
-        action: {
-          type: "place_drawn",
-          target: { kind: "match", slots, into: slots[0] },
-        },
+        action: { type: "reveal_for_match", slot: filled[0] },
       });
       return;
     }
 
-    if (Math.random() < 0.5 && filled.length > 0) {
+    if (view.heldFrom === "discard" || (Math.random() < 0.5 && filled.length > 0)) {
       this.send({
         type: "action",
         action: {

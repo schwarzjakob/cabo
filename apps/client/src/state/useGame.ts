@@ -70,6 +70,16 @@ export function useGame(): Game {
             // A match turns cards face up for the whole table — that beat is
             // the only chance opponents get to see what was traded.
             for (const event of message.events) {
+              if (event.type === "match_revealed") {
+                setTableReveals((current) => [
+                  ...current,
+                  {
+                    playerId: event.playerId,
+                    slot: event.slot,
+                    card: event.card,
+                  },
+                ]);
+              }
               if (event.type === "match_failed") {
                 setTableReveals(
                   event.revealed.map((each) => ({
